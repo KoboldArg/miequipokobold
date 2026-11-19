@@ -14,6 +14,7 @@
     statusFilter: 'todas',
     actionFilter: 'abiertas',
     currentAgentId: null,
+    tab: 'resumen',
   };
 
   /* ---------------- Utilidades ---------------- */
@@ -48,6 +49,7 @@
     bag: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8h14l-1 12H6L5 8zM9 8V6a3 3 0 0 1 6 0v2"/></svg>',
     demo: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h18v11H3zM8 20h8M12 16v4"/><path d="m10 8.5 4 2-4 2z"/></svg>',
     flag: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V4M5 4h11l-2 4 2 4H5"/></svg>',
+    userPlus: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M19 8v6M16 11h6"/></svg>',
     back: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>',
   };
 
@@ -283,6 +285,8 @@
     if (m && state.tl) {
       showFicha(decodeURIComponent(m[1]));
     } else {
+      const t = location.hash.match(/^#\/(agentes|seguimiento)$/);
+      state.tab = t ? t[1] : 'resumen';
       showDashboard();
     }
   }
@@ -294,9 +298,9 @@
     $('#view-dashboard').hidden = false;
     renderDashboard();
     if (state.returnTo) {
-      const target = document.getElementById(state.returnTo);
       state.returnTo = null;
-      if (target) target.scrollIntoView({ block: 'center' });
+      const tabs = $('#tabs');
+      window.scrollTo(0, Math.max(0, tabs.getBoundingClientRect().top + window.scrollY - 80));
     }
   }
 
@@ -304,7 +308,7 @@
     renderHeader();
     if (state.currentAgentId) {
       const a = state.data.agents.find((x) => x.id === state.currentAgentId);
-      if (!a) { location.hash = '#/'; return; }
+      if (!a) { location.hash = '#/agentes'; return; }
       updateFichaComputed(a);
       renderFichaActions(a);
     } else {
@@ -352,13 +356,39 @@
   }
 
   /* ---------------- Dashboard ---------------- */
+  const TABS = ['resumen', 'agentes', 'seguimiento'];
+
   function renderDashboard() {
     renderPeriod();
-    renderGoals();
-    renderSummary();
-    renderAgents();
+    renderTabs();
+    renderTeamGoals();
+    renderOtherGoals();
     renderCompare();
+    renderAgents();
     renderActions();
+  }
+
+  function renderTabs() {
+    TABS.forEach((t) => {
+      const on = state.tab === t;
+      const btn = $(`#tab-${t}`);
+      btn.setAttribute('aria-selected', String(on));
+      btn.classList.toggle('is-active', on);
+      $(`#panel-${t}`).hidden = !on;
+    });
+    const agents = state.data.agents.length;
+    const open = state.data.actions.filter((x) => x.status !== 'realizado').length;
+    $('#count-agentes').textContent = agents || '';
+    $('#count-seguimiento').textContent = open || '';
+  }
+
+  function setTab(tab) {
+    if (!TABS.includes(tab)) tab = 'resumen';
+    state.tab = tab;
+    const hash = tab === 'resumen' ? '#/' : `#/${tab}`;
+    if (state.currentAgentId) { location.hash = hash; return; }
+    if (location.hash !== hash) history.replaceState(null, '', hash);
+    renderTabs();
   }
 
   function renderPeriod() {
@@ -380,135 +410,175 @@
     toast(`Estás viendo ${periodLabel()}`);
   }
 
-  /* ----- C. Objetivos ----- */
-  function renderGoals() {
+  /* ----- Objetivos del equipo ----- */
+  const MAIN_INFO = {
+    ventas: {
+      title: 'Ventas', unit: 'ventas', unit1: 'venta', icon: 'bag', color: '#00AC46', soft: '#E6F7ED', ink: '#008F3A',
+      question: '¿Cuántas ventas querés lograr con tu equipo?',
+      help: 'Las ventas hechas se suman solas con lo que cargás en cada agente.',
+    },
+    demos: {
+      title: 'Demos', unit: 'demos', unit1: 'demo', icon: 'demo', color: '#3782CD', soft: '#EAF2FA', ink: '#2F6FAF',
+      question: '¿Cuántas demos querés que haga tu equipo?',
+      help: 'Las demos hechas y agendadas se suman solas con lo que cargás en cada agente.',
+    },
+    reclutamiento: {
+      title: 'Agentes nuevas', unit: 'agentes nuevas', unit1: 'agente nueva', icon: 'userPlus', color: '#734BA5', soft: '#F1ECF7', ink: '#734BA5',
+      question: '¿Cuántas agentes nuevas querés sumar al equipo?',
+      help: 'Se cuentan solas las agentes que agregues marcadas como «nueva».',
+    },
+  };
+
+  function renderTeamGoals() {
     const { goals, agents } = state.data;
-    const totals = calc.teamTotals(agents);
-    $('#btn-add-goal-top').hidden = goals.length === 0;
-
-    if (!goals.length) {
-      $('#goals').innerHTML = `
-        <div class="empty">
-          <strong>Definí qué querés alcanzar con tu equipo en este período.</strong>
-          <div class="btn-row"><button class="btn btn-primary" data-act="add-goal">+ Agregar objetivo</button></div>
-        </div>`;
-      return;
-    }
-
-    $('#goals').innerHTML = `<div class="goals-grid">${goals.map((g) => goalCard(g, totals)).join('')}</div>`;
+    const t = calc.teamTotals(agents);
+    const main = calc.mainGoals(goals);
+    $('#team-size').textContent = t.count
+      ? `${periodLabel()} · ${t.count} ${t.count === 1 ? 'agente' : 'agentes'} en el equipo (${t.active} ${t.active === 1 ? 'activa' : 'activas'})`
+      : `${periodLabel()} · todavía sin agentes cargadas`;
+    $('#team-goals').innerHTML = calc.MAIN_TYPES.map((type) => teamGoalCard(type, main[type], t, agents)).join('');
   }
 
+  function teamGoalCard(type, goal, t, agents) {
+    const info = MAIN_INFO[type];
+    const done = calc.mainAchieved(type, t);
+    const target = goal ? goal.target : null;
+    const has = calc.hasTarget(target);
+    const pct = calc.percent(done, target);
+    const left = calc.pending(done, target);
+    const scheduled = type === 'demos' ? t.demosScheduled : 0;
+    const doneW = calc.barWidth(pct);
+    const schedW = has && scheduled ? Math.min(100 - doneW, Math.round((scheduled / n(target)) * 100)) : 0;
+
+    let note = '';
+    if (type === 'ventas' || type === 'demos') {
+      const sum = type === 'ventas' ? t.salesTargets : t.demosTargets;
+      if (has && t.active) {
+        const diff = n(target) - sum;
+        if (!sum) note = `Todavía no le pusiste objetivo de ${info.unit} a tus agentes.`;
+        else if (diff > 0) note = `Repartiste <b>${sum}</b> entre tus agentes. Te faltan repartir <b>${diff}</b>.`;
+        else if (diff < 0) note = `Repartiste <b>${sum}</b> entre tus agentes: <b>${-diff}</b> más que el objetivo del equipo.`;
+        else note = `Repartiste <b>${sum}</b> entre tus agentes ✓`;
+      }
+    } else {
+      const nuevas = agents.filter((a) => a.isNew).map((a) => esc(a.name.split(' ')[0]));
+      note = nuevas.length
+        ? `Nuevas: ${nuevas.join(', ')}`
+        : 'Cuando agregues una agente, marcala como «nueva» y se suma acá.';
+    }
+
+    return `
+      <article class="tgoal" style="--c:${info.color};--c-soft:${info.soft};--c-ink:${info.ink}">
+        <div class="tgoal-head">
+          <span class="tgoal-icon" aria-hidden="true">${ICONS[info.icon]}</span>
+          <h3>${info.title}</h3>
+          ${has ? `<button class="btn btn-ghost btn-sm tgoal-edit" data-act="main-goal" data-type="${type}" aria-label="Cambiar el objetivo de ${info.title.toLowerCase()}">${ICONS.edit} Cambiar</button>` : ''}
+        </div>
+        ${has ? `
+          <p class="tgoal-num"><b>${done}</b> de ${n(target)}</p>
+          <div class="bar bar-lg bar-split" role="img" aria-label="${done} de ${n(target)} ${info.unit}${scheduled ? `, ${scheduled} agendadas` : ''}">
+            <span style="width:${doneW}%;background:${info.color}"></span>${schedW ? `<span class="sched" style="width:${schedW}%;background:${info.color}"></span>` : ''}
+          </div>
+          <div class="tgoal-foot">
+            <span><b>${pct}%</b></span>
+            ${left > 0 ? `<span>Faltan <b>${left}</b></span>` : '<span class="tgoal-done">¡Cumplido!</span>'}
+          </div>
+          ${scheduled ? `<p class="tgoal-sched"><i></i>${scheduled} ${scheduled === 1 ? 'demo agendada' : 'demos agendadas'}</p>` : ''}`
+        : `
+          <p class="tgoal-num"><b>${done}</b> ${done === 1 ? info.unit1 : info.unit}</p>
+          <button class="btn btn-primary btn-sm" data-act="main-goal" data-type="${type}">Definir objetivo</button>`}
+        ${note ? `<p class="tgoal-note">${note}</p>` : ''}
+      </article>`;
+  }
+
+  function mainGoalForm(type) {
+    const info = MAIN_INFO[type];
+    const goal = calc.mainGoals(state.data.goals)[type];
+    openModal({
+      title: `Objetivo de ${info.title.toLowerCase()} del equipo`,
+      submitLabel: 'Guardar',
+      body: `
+        <div class="form-grid">
+          ${stepperField('target', `${info.question} <span class="opt">${esc(periodLabel())}</span>`, goal ? goal.target : null, { placeholder: 'Sin definir', help: info.help })}
+        </div>`,
+      onSubmit: async (form) => {
+        const target = intOrNull(form.elements.target.value);
+        return mutate(async () => {
+          if (goal) await update('goals', goal.id, { target });
+          else await create('goals', { type, description: '', target, achieved: 0 });
+        }, target ? 'Objetivo guardado' : 'Objetivo sin definir');
+      },
+    });
+  }
+
+  /* ----- Otros objetivos (se cargan a mano) ----- */
   function goalTitle(g) {
     const t = config.goalTypes[g.type] || config.goalTypes.otro;
     return g.description && g.description.trim() ? g.description : `Objetivo de ${t.label.toLowerCase()}`;
   }
 
-  function goalCard(g, totals) {
-    const t = config.goalTypes[g.type] || config.goalTypes.otro;
-    const achieved = calc.goalAchieved(g, totals);
-    const target = n(g.target);
-    const pct = calc.percent(achieved, g.target);
-    const left = calc.pending(achieved, g.target);
-    const done = pct != null && pct >= 100;
-    return `
-      <article class="goal-card" style="--accent:${t.color}">
-        <div class="goal-top">
-          <span class="tag" style="--tag-bg:${t.soft};--tag-fg:${t.color === '#00AC46' ? '#008F3A' : t.color}">${t.label}</span>
-          <div class="goal-actions">
-            <button class="icon-btn" data-act="edit-goal" data-id="${g.id}" aria-label="Editar objetivo" title="Editar">${ICONS.edit}</button>
-            <button class="icon-btn" data-act="delete-goal" data-id="${g.id}" aria-label="Eliminar objetivo" title="Eliminar">${ICONS.trash}</button>
-          </div>
+  function renderOtherGoals() {
+    const others = calc.otherGoals(state.data.goals);
+    $('#other-goals').innerHTML = `
+      <div class="other-goals">
+        <div class="other-head">
+          <h3>Otros objetivos</h3>
+          <button class="btn btn-ghost btn-sm" data-act="add-goal">+ Agregar otro objetivo</button>
         </div>
-        <h3>${esc(goalTitle(g))}</h3>
-        ${calc.hasTarget(g.target) ? `
-          <div class="goal-numbers"><strong>${achieved}</strong><span class="of">de ${target}</span></div>
-          <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${calc.barWidth(pct)}"><span style="width:${calc.barWidth(pct)}%;background:${t.color}"></span></div>
-          <div class="goal-foot">
-            <span><span class="pct">${pct}%</span> de avance</span>
-            ${done ? '<span class="goal-done">¡Objetivo cumplido!</span>' : `<span>Faltan <b>${left}</b></span>`}
-          </div>`
-        : `
-          <div class="goal-numbers"><strong>${achieved}</strong><span class="of">alcanzadas</span></div>
-          <p class="goal-note">Falta definir la cantidad. <button class="btn btn-ghost btn-sm" data-act="edit-goal" data-id="${g.id}">Completar</button></p>`}
-      </article>`;
+        ${others.length ? `<ul class="other-list">${others.map((g) => {
+          const has = calc.hasTarget(g.target);
+          const pct = calc.percent(g.achieved, g.target);
+          return `
+            <li class="other-row">
+              <div class="other-main">
+                <span class="other-title">${esc(goalTitle(g))}</span>
+                ${has ? `<div class="bar"><span style="width:${calc.barWidth(pct)}%;background:var(--orange)"></span></div>` : ''}
+              </div>
+              <div class="mini-stepper" role="group" aria-label="Cantidad lograda">
+                <button type="button" data-act="goal-step" data-id="${g.id}" data-delta="-1" aria-label="Restar uno" ${n(g.achieved) === 0 ? 'disabled' : ''}>−</button>
+                <span><b>${n(g.achieved)}</b>${has ? ` de ${n(g.target)}` : ''}</span>
+                <button type="button" data-act="goal-step" data-id="${g.id}" data-delta="1" aria-label="Sumar uno">+</button>
+              </div>
+              <div class="other-btns">
+                <button class="icon-btn" data-act="edit-goal" data-id="${g.id}" aria-label="Editar objetivo" title="Editar">${ICONS.edit}</button>
+                <button class="icon-btn" data-act="delete-goal" data-id="${g.id}" aria-label="Eliminar objetivo" title="Eliminar">${ICONS.trash}</button>
+              </div>
+            </li>`;
+        }).join('')}</ul>` : '<p class="other-empty">Por ejemplo: activar a 2 agentes inactivas, o capacitar al equipo en un producto.</p>'}
+      </div>`;
   }
 
-  function goalForm(goal, presetType) {
+  function goalForm(goal) {
     const isNew = !goal;
-    const g = goal || { type: presetType || 'ventas', description: '', target: null, achieved: 0, auto: true };
-    const totals = calc.teamTotals(state.data.agents);
-    const typeOptions = Object.entries(config.goalTypes).map(([value, t]) => ({ value, label: t.label, color: t.color }));
-
+    const g = goal || { type: 'otro', description: '', target: null, achieved: 0 };
     openModal({
-      title: isNew ? 'Nuevo objetivo del equipo' : 'Editar objetivo',
+      title: isNew ? 'Otro objetivo del equipo' : 'Editar objetivo',
       submitLabel: isNew ? 'Agregar objetivo' : 'Guardar cambios',
       body: `
         <div class="form-grid">
-          <div class="field">
-            <span class="field-label">1. Tipo de objetivo</span>
-            ${choiceGroup('type', typeOptions, g.type)}
-          </div>
-          ${textField('description', '2. Descripción del objetivo', g.description, { placeholder: 'Ej.: alcanzar las ventas del equipo en el período' })}
-          <div class="form-row-2">
-            ${stepperField('target', '3. Cantidad objetivo', g.target)}
-            <div id="achieved-wrap">${stepperField('achieved', '4. Cantidad alcanzada', n(g.achieved))}</div>
-          </div>
-          <label class="toggle" id="auto-wrap">
-            <input type="checkbox" name="auto" ${g.auto ? 'checked' : ''}>
-            <span id="auto-text"></span>
-          </label>
+          ${textField('description', '¿Qué querés lograr?', g.description, { placeholder: 'Ej.: activar a 2 agentes inactivas', autofocus: true })}
+          ${stepperField('target', '¿Cuántas?', g.target, { placeholder: 'Sin definir', help: 'Después vas sumando lo logrado con los botones + y − en el resumen.' })}
         </div>`,
-      onOpen: (form) => {
-        const sync = () => {
-          const type = form.elements.type.value;
-          const t = config.goalTypes[type];
-          const autoWrap = $('#auto-wrap', form);
-          const achievedInput = form.elements.achieved;
-          const stepBtns = $$('#achieved-wrap button', form);
-          if (t.auto) {
-            autoWrap.hidden = false;
-            const what = type === 'ventas' ? 'ventas' : 'demos';
-            $('#auto-text', form).innerHTML = `<b>Calcular automáticamente</b> con las ${what} hechas que cargaste en cada agente (hoy: ${type === 'ventas' ? totals.sales : totals.demos}).`;
-            const auto = form.elements.auto.checked;
-            achievedInput.disabled = auto;
-            stepBtns.forEach((b) => { b.disabled = auto; });
-            if (auto) achievedInput.value = type === 'ventas' ? totals.sales : totals.demos;
-          } else {
-            autoWrap.hidden = true;
-            achievedInput.disabled = false;
-            stepBtns.forEach((b) => { b.disabled = false; });
-          }
-        };
-        // al desactivar el cálculo automático, la cantidad vuelve al último valor cargado a mano
-        let manualValue = n(g.achieved);
-        form.elements.achieved.addEventListener('input', () => { if (!form.elements.achieved.disabled) manualValue = n(form.elements.achieved.value); });
-        form.addEventListener('change', (e) => {
-          if (e.target.name === 'auto' || e.target.name === 'type') {
-            const t = config.goalTypes[form.elements.type.value];
-            if (!t.auto || !form.elements.auto.checked) form.elements.achieved.value = manualValue;
-            sync();
-          }
-        });
-        sync();
-      },
       onSubmit: async (form) => {
-        const type = form.elements.type.value;
-        const t = config.goalTypes[type];
-        const auto = t.auto && form.elements.auto.checked;
-        const data = {
-          type,
-          description: form.elements.description.value.trim(),
-          target: intOrNull(form.elements.target.value),
-          achieved: auto ? n(goal ? goal.achieved : 0) : n(form.elements.achieved.value),
-          auto,
-        };
-        if (!auto && form.elements.achieved.value !== '' && Number(form.elements.achieved.value) < 0) data.achieved = 0;
+        const el = form.elements;
+        const description = el.description.value.trim();
+        if (!description) { showFieldError(el.description, 'Escribí qué querés lograr.'); return false; }
+        const data = { description, target: intOrNull(el.target.value) };
+        if (isNew) Object.assign(data, { type: 'otro', achieved: 0 });
         return mutate(
           () => (isNew ? create('goals', data) : update('goals', goal.id, data)),
           isNew ? 'Objetivo agregado' : 'Objetivo actualizado'
         );
       },
     });
+  }
+
+  function stepGoal(id, delta) {
+    const g = state.data.goals.find((x) => x.id === id);
+    if (!g) return;
+    const achieved = Math.max(0, n(g.achieved) + delta);
+    if (achieved === n(g.achieved)) return;
+    mutate(() => update('goals', id, { achieved }));
   }
 
   async function deleteGoal(id) {
@@ -518,69 +588,23 @@
     if (ok) mutate(() => remove('goals', id), 'Objetivo eliminado');
   }
 
-  /* ----- D. Resumen ----- */
-  function teamCard({ kind, goal, done, scheduled, individualSum, t }) {
-    const isSales = kind === 'ventas';
-    const unit = isSales ? 'ventas' : 'demos';
-    const title = isSales ? 'Ventas del equipo' : 'Demos del equipo';
-    const icon = isSales ? ICONS.bag : ICONS.demo;
-    let body;
-    if (goal && calc.hasTarget(goal.target)) {
-      body = metric({ label: 'Objetivo del equipo', done, target: goal.target, scheduled, unit });
-      const diff = n(goal.target) - individualSum;
-      let split;
-      if (!t.active) split = '';
-      else if (!individualSum) split = `Todavía no repartiste objetivos de ${unit} entre tus agentes.`;
-      else if (diff > 0) split = `Objetivos individuales: <b>${individualSum}</b>. Te faltan repartir <b>${diff}</b>.`;
-      else if (diff < 0) split = `Objetivos individuales: <b>${individualSum}</b>, ${-diff} más que el del equipo.`;
-      else split = `Objetivos individuales: <b>${individualSum}</b>. Coinciden con el del equipo ✓`;
-      if (split) body += `<p class="team-split">${split}</p>`;
-    } else {
-      body = `
-        <span class="stat-value">${done}</span>
-        <span class="stat-sub">${unit} hechas${scheduled ? ` · ${scheduled} agendadas` : ''}</span>
-        ${goal
-          ? `<button class="btn btn-primary btn-sm" data-act="edit-goal" data-id="${goal.id}">Completar objetivo</button>`
-          : `<button class="btn btn-primary btn-sm" data-act="add-goal" data-type="${kind}">+ Definir objetivo de ${unit}</button>`}`;
-    }
-    return `
-      <div class="stat stat-team" style="--icon:${isSales ? 'var(--green)' : 'var(--blue)'}">
-        <div class="stat-team-head"><span class="stat-icon">${icon}</span><span class="stat-label">${title}</span></div>
-        ${body}
-      </div>`;
-  }
+  /* ----- Mis agentes ----- */
+  const fold = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
 
-  function renderSummary() {
-    const { agents, goals } = state.data;
-    const t = calc.teamTotals(agents);
-    const sg = calc.teamSalesGoal(goals);
-    const dg = calc.teamDemosGoal(goals);
-
-    $('#summary').innerHTML = `
-      <div class="stat stat-agents" style="--icon:var(--purple)">
-        <span class="stat-icon">${ICONS.users}</span>
-        <span class="stat-label">Agentes en mi equipo</span>
-        <span class="stat-value">${t.count}</span>
-        <span class="stat-sub">${t.count ? `${t.active} ${t.active === 1 ? 'activa' : 'activas'}` : '&nbsp;'}</span>
-      </div>
-      ${teamCard({ kind: 'ventas', goal: sg, done: sg ? calc.goalAchieved(sg, t) : t.sales, scheduled: null, individualSum: t.salesTargets, t })}
-      ${teamCard({ kind: 'demos', goal: dg, done: dg ? calc.goalAchieved(dg, t) : t.demos, scheduled: t.demosScheduled, individualSum: t.demosTargets, t })}`;
-  }
-
-  /* ----- 4. Mis agentes ----- */
   function filteredAgents() {
-    const q = state.search.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+    const q = fold(state.search);
     return state.data.agents.filter((a) => {
       if (state.statusFilter === 'activas' && a.status === 'inactiva') return false;
       if (state.statusFilter === 'inactivas' && a.status !== 'inactiva') return false;
-      if (q && !a.name.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().includes(q)) return false;
+      if (q && !fold(a.name).includes(q)) return false;
       return true;
     });
   }
 
   function renderAgents() {
     const agents = state.data.agents;
-    $('#agents-toolbar').hidden = agents.length === 0;
+    const showTools = agents.length >= 4;
+    $('#agents-toolbar').hidden = !showTools;
     $('#btn-add-agent-top').hidden = agents.length === 0;
 
     if (!agents.length) {
@@ -597,6 +621,7 @@
       if (other) maybeShowImport(other.id);
       return;
     }
+    if (!showTools) { state.search = ''; state.statusFilter = 'todas'; $('#agent-search').value = ''; }
 
     const counts = {
       todas: agents.length,
@@ -633,7 +658,7 @@
     if (!other.agents.length) return;
     const ok = await confirmDialog({
       title: `¿Traer tus agentes de ${periodLabel(fromId)}?`,
-      message: `Se van a copiar ${other.agents.length} ${other.agents.length === 1 ? 'agente' : 'agentes'} con su nombre y estado. Los objetivos, demos, ventas y seguimientos empiezan en cero para ${periodLabel()}.`,
+      message: `Se van a copiar ${other.agents.length} ${other.agents.length === 1 ? 'agente' : 'agentes'} con su nombre y estado. Los objetivos, demos y ventas empiezan en cero para ${periodLabel()}.`,
       confirmLabel: 'Sí, traerlas',
     });
     if (!ok) return;
@@ -646,7 +671,7 @@
 
   function emptyAgent(extra) {
     return Object.assign({
-      name: '', status: 'activa', personalGoal: '',
+      name: '', status: 'activa', isNew: false, personalGoal: '',
       target: null, sales: 0,
       demosTarget: null, demosDone: 0, demosScheduled: 0,
       notes: '', needs: '', nextAction: '', followUpDate: '',
@@ -663,8 +688,8 @@
           <div>
             <h3>${esc(a.name)}</h3>
             <div class="meta">
-              <span class="pill ${inactive ? 'pill-inactive' : 'pill-active'}">${inactive ? 'Inactiva' : 'Activa'}</span>
-              ${!inactive ? `<span class="pill"><span class="dot" style="--dot:${sit.color}"></span>${sit.label}</span>` : ''}
+              ${inactive ? '<span class="pill pill-inactive">Inactiva</span>' : `<span class="pill"><span class="dot" style="--dot:${sit.color}"></span>${sit.label}</span>`}
+              ${a.isNew ? '<span class="pill pill-new">Nueva</span>' : ''}
             </div>
           </div>
         </div>
@@ -672,77 +697,94 @@
         ${metric({ label: 'Demos', done: a.demosDone, target: a.demosTarget, scheduled: a.demosScheduled, unit: 'demos' })}
         ${a.nextAction ? `<div class="next-action"><b>Próxima acción</b>${esc(a.nextAction)}${a.followUpDate ? ` · ${fmtDate(a.followUpDate)}` : ''}</div>` : ''}
         <div class="agent-foot">
-          <button class="btn btn-soft btn-sm" data-act="view-agent" data-id="${a.id}">Ver seguimiento</button>
-          <button class="btn btn-outline btn-sm" data-act="edit-agent" data-id="${a.id}">Editar</button>
-          <button class="btn btn-ghost btn-sm" data-act="delete-agent" data-id="${a.id}">Eliminar</button>
+          <button class="btn btn-primary btn-sm" data-act="progress" data-id="${a.id}">Cargar avance</button>
+          <button class="btn btn-outline btn-sm" data-act="view-agent" data-id="${a.id}">Ver ficha</button>
         </div>
       </article>`;
   }
 
-  function agentForm(agent) {
-    const isNew = !agent;
-    const a = agent || emptyAgent();
+  const sameName = (name, exceptId) => state.data.agents.some((a) => a.id !== exceptId && fold(a.name) === fold(name));
+
+  /* Alta de una agente: solo lo necesario. El resto se completa después. */
+  function agentForm() {
     openModal({
-      title: isNew ? 'Nueva agente' : `Editar a ${a.name}`,
-      submitLabel: isNew ? 'Agregar agente' : 'Guardar cambios',
+      title: 'Nueva agente',
+      submitLabel: 'Agregar agente',
       body: `
         <div class="form-grid">
-          ${textField('name', 'Nombre y apellido', a.name, { placeholder: 'Ej.: María Pérez', autofocus: true })}
-          <div class="field">
-            <span class="field-label">Estado</span>
-            ${choiceGroup('status', [{ value: 'activa', label: 'Activa' }, { value: 'inactiva', label: 'Inactiva', color: '#707070' }], a.status)}
-          </div>
-
-          <div class="form-block form-block-sales">
-            <p class="form-block-title">${ICONS.bag} Ventas · ${esc(periodLabel())}</p>
+          ${textField('name', 'Nombre y apellido', '', { placeholder: 'Ej.: María Pérez', autofocus: true })}
+          <label class="toggle toggle-new">
+            <input type="checkbox" name="isNew">
+            <span><b>Es nueva:</b> se sumó al equipo en ${esc(periodLabel())}. Cuenta para el objetivo de agentes nuevas.</span>
+          </label>
+          <div class="form-block form-block-goals">
+            <p class="form-block-title">${ICONS.flag} Sus objetivos para ${esc(periodLabel())}</p>
             <div class="form-row-2">
-              ${stepperField('target', 'Objetivo de ventas', a.target, { placeholder: 'Sin definir', help: 'Lo que le proponés para el período' })}
-              ${stepperField('sales', 'Ventas hechas', n(a.sales), { help: 'Ventas ya concretadas' })}
+              ${stepperField('target', 'Ventas', null, { placeholder: 'Sin definir' })}
+              ${stepperField('demosTarget', 'Demos', null, { placeholder: 'Sin definir' })}
             </div>
+            <p class="field-help">Podés dejarlos vacíos y completarlos después en su ficha.</p>
           </div>
-
-          <div class="form-block form-block-demos">
-            <p class="form-block-title">${ICONS.demo} Demos · ${esc(periodLabel())}</p>
-            <div class="form-row-2">
-              ${stepperField('demosTarget', 'Objetivo de demos', a.demosTarget, { placeholder: 'Sin definir', help: 'Lo que le proponés para el período' })}
-              ${stepperField('demosDone', 'Demos hechas', n(a.demosDone), { help: 'Demos que ya hizo' })}
-              ${stepperField('demosScheduled', 'Demos agendadas', n(a.demosScheduled), { help: 'Con fecha, todavía no hechas' })}
-            </div>
-          </div>
-
-          ${textField('nextAction', 'Próxima acción a realizar', a.nextAction, { optional: true, placeholder: 'Ej.: acompañarla en su próxima demo' })}
-          <details class="more" ${!isNew && (a.notes || a.needs || a.personalGoal || a.followUpDate) ? 'open' : ''}>
-            <summary>Seguimiento <span class="opt">&nbsp;(opcional)</span></summary>
-            <div class="form-grid">
-              ${textField('personalGoal', '¿Qué quiere conseguir?', a.personalGoal, { multiline: true, placeholder: 'Lo que ella se propone en este período' })}
-              ${textField('needs', '¿Qué necesita trabajar esta agente?', a.needs, { multiline: true })}
-              ${textField('notes', 'Observaciones', a.notes, { multiline: true })}
-              ${textField('followUpDate', 'Fecha de seguimiento', a.followUpDate, { type: 'date' })}
-            </div>
-          </details>
         </div>`,
       onSubmit: async (form) => {
         const el = form.elements;
         const name = el.name.value.trim().replace(/\s+/g, ' ');
         if (!name) { showFieldError(el.name, 'Escribí el nombre de la agente.'); return false; }
-        const data = {
+        if (sameName(name)) { showFieldError(el.name, `Ya tenés una agente llamada ${name} en este período.`); return false; }
+        const data = emptyAgent({
           name,
-          status: el.status.value === 'inactiva' ? 'inactiva' : 'activa',
+          isNew: el.isNew.checked,
           target: intOrNull(el.target.value),
-          sales: n(el.sales.value),
           demosTarget: intOrNull(el.demosTarget.value),
+        });
+        return mutate(() => create('agents', data), `${name} se sumó a tu equipo`);
+      },
+    });
+  }
+
+  /* "Cargar avance": lo que se actualiza cada semana, en una sola ventana. */
+  function progressForm(a) {
+    if (!a) return;
+    openModal({
+      title: `Avance de ${a.name}`,
+      submitLabel: 'Guardar avance',
+      body: `
+        <div class="form-grid">
+          <div class="form-block form-block-sales">
+            <p class="form-block-title">${ICONS.bag} Ventas</p>
+            ${stepperField('sales', 'Ventas hechas', n(a.sales), { help: calc.hasTarget(a.target) ? `Su objetivo: ${n(a.target)}` : 'Sin objetivo definido' })}
+          </div>
+          <div class="form-block form-block-demos">
+            <p class="form-block-title">${ICONS.demo} Demos</p>
+            <div class="form-row-2">
+              ${stepperField('demosDone', 'Demos hechas', n(a.demosDone), { help: calc.hasTarget(a.demosTarget) ? `Su objetivo: ${n(a.demosTarget)}` : 'Sin objetivo definido' })}
+              ${stepperField('demosScheduled', 'Demos agendadas', n(a.demosScheduled), { help: 'Con fecha, todavía no hechas' })}
+            </div>
+            <button type="button" class="btn btn-soft btn-sm btn-convert" id="btn-convert">✓ Se hizo una demo agendada</button>
+          </div>
+          ${textField('nextAction', 'Próxima acción', a.nextAction, { optional: true, placeholder: 'Ej.: acompañarla en su próxima demo' })}
+        </div>`,
+      onOpen: (form) => {
+        const el = form.elements;
+        const sync = () => { $('#btn-convert', form).hidden = n(el.demosScheduled.value) === 0; };
+        form.oninput = sync;
+        $('#btn-convert', form).addEventListener('click', () => {
+          if (n(el.demosScheduled.value) === 0) return;
+          el.demosScheduled.value = n(el.demosScheduled.value) - 1;
+          el.demosDone.value = n(el.demosDone.value) + 1;
+          sync();
+        });
+        sync();
+      },
+      onSubmit: async (form) => {
+        const el = form.elements;
+        const data = {
+          sales: n(el.sales.value),
           demosDone: n(el.demosDone.value),
           demosScheduled: n(el.demosScheduled.value),
           nextAction: el.nextAction.value.trim(),
-          personalGoal: el.personalGoal.value.trim(),
-          needs: el.needs.value.trim(),
-          notes: el.notes.value.trim(),
-          followUpDate: el.followUpDate.value,
         };
-        return mutate(
-          () => (isNew ? create('agents', emptyAgent(data)) : update('agents', agent.id, data)),
-          isNew ? `${name} se sumó a tu equipo` : 'Cambios guardados'
-        );
+        return mutate(() => update('agents', a.id, data), 'Avance guardado');
       },
     });
   }
@@ -753,7 +795,7 @@
     const linked = state.data.actions.filter((x) => x.agentId === id).length;
     const ok = await confirmDialog({
       title: `¿Eliminar a ${a.name}?`,
-      message: `Se van a borrar sus datos de ${periodLabel()}${linked ? ` y ${linked === 1 ? 'su acción' : `sus ${linked} acciones`} de seguimiento` : ''}. Esta acción no se puede deshacer.`,
+      message: `Se borran sus datos de ${periodLabel()}${linked ? ` y ${linked === 1 ? 'su acción' : `sus ${linked} acciones`} de seguimiento` : ''}, y sus ventas y demos dejan de sumar al equipo. Si dejó de trabajar, mejor marcala como inactiva. Esta acción no se puede deshacer.`,
     });
     if (!ok) return;
     const wasInFicha = state.currentAgentId === id;
@@ -762,7 +804,7 @@
       await store.removeWhere(state.tl.id, state.periodId, 'actions', 'agentId', id);
       await remove('agents', id);
     }, `${a.name} fue eliminada`);
-    if (wasInFicha) location.hash = '#/';
+    if (wasInFicha) location.hash = '#/agentes';
   }
 
   /* ----- 6. Comparativa ----- */
@@ -789,6 +831,7 @@
         <span><span class="dot" style="--dot:var(--yellow)"></span>Necesita seguimiento</span>
         <span><span class="dot" style="--dot:var(--orange)"></span>Requiere atención</span>
         <span><span class="dot" style="--dot:var(--red)"></span>Necesita intervención</span>
+        <span><span class="dot" style="--dot:var(--purple)"></span>Recién empieza</span>
         <span><span class="legend-sched"></span>Demos agendadas</span>
       </div>
       <div class="compare-row compare-head">
@@ -953,7 +996,7 @@
     const a = state.data.agents.find((x) => x.id === id);
     if (!a) { history.replaceState(null, '', '#/'); showDashboard(); return; }
     state.currentAgentId = id;
-    state.returnTo = 'sec-agents';
+    state.returnTo = true;
     $('#view-dashboard').hidden = true;
     const view = $('#view-agent');
     view.hidden = false;
@@ -962,7 +1005,7 @@
     const sit = calc.agentSituation(a);
     view.innerHTML = `
       <div class="ficha-top">
-        <a class="btn btn-outline" href="#/">${ICONS.back} Volver a mi equipo</a>
+        <a class="btn btn-outline" href="#/agentes">${ICONS.back} Volver a mis agentes</a>
         <span class="saved-indicator" id="saved-indicator">✓ Cambios guardados</span>
       </div>
 
@@ -976,13 +1019,17 @@
         <div class="field">
           <span class="field-label">Estado</span>
           ${choiceGroup('ficha-status', [{ value: 'activa', label: 'Activa' }, { value: 'inactiva', label: 'Inactiva', color: '#707070' }], a.status).replace(/name="ficha-status"/g, 'name="ficha-status" data-field="status"')}
+          <label class="toggle toggle-new toggle-sm">
+            <input type="checkbox" data-field="isNew" ${a.isNew ? 'checked' : ''}>
+            <span><b>Es nueva</b> (se sumó en ${esc(periodLabel())})</span>
+          </label>
         </div>
       </div>
 
       <div class="ficha-grid">
         <section class="ficha-card">
           <h2><span class="num">1</span>Su objetivo</h2>
-          ${fichaText('personalGoal', '¿Qué quiere conseguir?', a.personalGoal, true, 'Ej.: lograr sus primeras 3 ventas para acceder al incentivo')}
+          ${fichaText('personalGoal', '¿Qué quiere conseguir? (incentivo, meta personal)', a.personalGoal, true, 'Ej.: llegar a 4 ventas para el incentivo del período')}
           <p class="ficha-sub">Objetivos que le proponés para ${esc(periodLabel())}</p>
           <div class="form-row-2">
             ${fichaStepper('target', 'Objetivo de ventas', a.target, 'Sin definir')}
@@ -996,6 +1043,7 @@
             ${fichaStepper('demosDone', 'Demos hechas', n(a.demosDone))}
             ${fichaStepper('demosScheduled', 'Demos agendadas', n(a.demosScheduled))}
           </div>
+          <button type="button" class="btn btn-soft btn-sm btn-convert" data-act="ficha-convert" id="ficha-convert">✓ Se hizo una demo agendada</button>
           <div id="ficha-demos"></div>
         </section>
 
@@ -1029,12 +1077,23 @@
       </section>
 
       <div class="ficha-top" style="margin-top:20px">
-        <a class="btn btn-outline" href="#/">${ICONS.back} Volver a mi equipo</a>
+        <a class="btn btn-outline" href="#/agentes">${ICONS.back} Volver a mis agentes</a>
         <button class="btn btn-ghost" data-act="delete-agent" data-id="${a.id}">${ICONS.trash} Eliminar agente</button>
       </div>`;
 
     updateFichaComputed(a);
     renderFichaActions(a);
+  }
+
+  /* Pasa una demo de "agendada" a "hecha" en la ficha. */
+  function fichaConvert() {
+    const sched = $('#ff-demosScheduled');
+    const done = $('#ff-demosDone');
+    if (!sched || !done || n(sched.value) === 0) return;
+    sched.value = n(sched.value) - 1;
+    done.value = n(done.value) + 1;
+    [sched, done].forEach((el) => el.dispatchEvent(new Event('change', { bubbles: true })));
+    toast('Demo pasada a hecha');
   }
 
   function fichaStepper(field, label, value, placeholder) {
@@ -1065,6 +1124,7 @@
     if (['demosDone', 'demosScheduled', 'sales'].includes(f)) return n(el.value);
     if (f === 'name') return el.value.trim().replace(/\s+/g, ' ');
     if (f === 'status') return el.value === 'inactiva' ? 'inactiva' : 'activa';
+    if (f === 'isNew') return el.checked;
     return el.type === 'date' ? el.value : el.value.trim();
   }
 
@@ -1136,6 +1196,8 @@
         ? metric({ label: 'Avance de ventas', done: a.sales, target: a.target, unit: 'ventas' })
         : '<span>Definí su objetivo de ventas en "Su objetivo" para ver el avance.</span>'}</div>`;
     }
+    const conv = $('#ficha-convert');
+    if (conv) conv.hidden = n(a.demosScheduled) === 0;
     const demosBox = $('#ficha-demos');
     if (demosBox) {
       const sched = n(a.demosScheduled);
@@ -1165,13 +1227,14 @@
   function printSummary() {
     const { goals, agents, actions } = state.data;
     const totals = calc.teamTotals(agents);
-    const sg = calc.teamSalesGoal(goals);
-    const dg = calc.teamDemosGoal(goals);
-    const teamLine = (goal, fallback, unit) => {
-      const done = goal ? calc.goalAchieved(goal, totals) : fallback;
-      if (!goal || !calc.hasTarget(goal.target)) return `<b>${done}</b>${unit} hechas · sin objetivo`;
+    const main = calc.mainGoals(goals);
+    const teamLine = (type) => {
+      const goal = main[type];
+      const done = calc.mainAchieved(type, totals);
+      if (!goal || !calc.hasTarget(goal.target)) return `<b>${done}</b>sin objetivo definido`;
       return `<b>${done} de ${n(goal.target)}</b>${calc.percent(done, goal.target)}% · faltan ${calc.pending(done, goal.target)}`;
     };
+    const others = calc.otherGoals(goals);
     const fmtGoal = (done, target) => (calc.hasTarget(target) ? `${n(done)} / ${n(target)} (${calc.percent(done, target)}%)` : `${n(done)} / –`);
     const openActions = sortActions(actions.filter((x) => x.status !== 'realizado'));
 
@@ -1181,24 +1244,23 @@
         <div class="pr-meta">Team Leader: <b>${esc(state.tl.name)}</b><br>Período: <b>${esc(periodLabel())}</b><br>Fecha: ${fmtDate(todayISO())}</div>
       </div>
 
-      <h2>Resumen del equipo</h2>
+      <h2>Objetivos de mi equipo</h2>
       <div class="pr-stats">
-        <div>Agentes<b>${totals.count}</b>${totals.active} activas</div>
-        <div>Ventas del equipo${teamLine(sg, totals.sales, ' ventas')}</div>
-        <div>Demos del equipo${teamLine(dg, totals.demos, ' demos')}${totals.demosScheduled ? ` · ${totals.demosScheduled} agendadas` : ''}</div>
+        <div>Ventas${teamLine('ventas')}</div>
+        <div>Demos${teamLine('demos')}${totals.demosScheduled ? ` · ${totals.demosScheduled} agendadas` : ''}</div>
+        <div>Agentes nuevas${teamLine('reclutamiento')}</div>
+        <div>Equipo<b>${totals.count} agentes</b>${totals.active} activas</div>
       </div>
-
-      <h2>Objetivos del equipo</h2>
-      ${goals.length ? `<table><thead><tr><th>Tipo</th><th>Objetivo</th><th>Meta</th><th>Alcanzado</th><th>Faltan</th><th>Avance</th></tr></thead><tbody>
-        ${goals.map((g) => {
-          const ach = calc.goalAchieved(g, totals); const p = calc.percent(ach, g.target);
-          return `<tr><td>${esc((config.goalTypes[g.type] || config.goalTypes.otro).label)}</td><td>${esc(goalTitle(g))}</td><td>${calc.hasTarget(g.target) ? n(g.target) : '–'}</td><td>${ach}</td><td>${calc.hasTarget(g.target) ? calc.pending(ach, g.target) : '–'}</td><td>${p == null ? '–' : p + '%'}</td></tr>`;
-        }).join('')}</tbody></table>` : '<p class="pr-empty">Sin objetivos cargados.</p>'}
+      ${others.length ? `<table><thead><tr><th>Otros objetivos</th><th>Meta</th><th>Logrado</th><th>Avance</th></tr></thead><tbody>
+        ${others.map((g) => {
+          const p = calc.percent(g.achieved, g.target);
+          return `<tr><td>${esc(goalTitle(g))}</td><td>${calc.hasTarget(g.target) ? n(g.target) : '–'}</td><td>${n(g.achieved)}</td><td>${p == null ? '–' : p + '%'}</td></tr>`;
+        }).join('')}</tbody></table>` : ''}
 
       <h2>Mi equipo, agente por agente</h2>
       ${agents.length ? `<table><thead><tr><th>Agente</th><th>Estado</th><th>Ventas (hechas / objetivo)</th><th>Demos (hechas / objetivo)</th><th>Demos agendadas</th><th>Situación</th><th>Próxima acción</th></tr></thead><tbody>
         ${agents.map((a) => {
-          return `<tr><td>${esc(a.name)}</td><td>${a.status === 'inactiva' ? 'Inactiva' : 'Activa'}</td><td>${fmtGoal(a.sales, a.target)}</td><td>${fmtGoal(a.demosDone, a.demosTarget)}</td><td>${n(a.demosScheduled)}</td><td>${esc(calc.agentSituation(a).label)}</td><td>${esc(a.nextAction)}${a.followUpDate ? ` (${fmtDate(a.followUpDate)})` : ''}</td></tr>`;
+          return `<tr><td>${esc(a.name)}</td><td>${a.status === 'inactiva' ? 'Inactiva' : 'Activa'}${a.isNew ? ' · Nueva' : ''}</td><td>${fmtGoal(a.sales, a.target)}</td><td>${fmtGoal(a.demosDone, a.demosTarget)}</td><td>${n(a.demosScheduled)}</td><td>${esc(calc.agentSituation(a).label)}</td><td>${esc(a.nextAction)}${a.followUpDate ? ` (${fmtDate(a.followUpDate)})` : ''}</td></tr>`;
         }).join('')}</tbody></table>` : '<p class="pr-empty">Sin agentes cargadas.</p>'}
 
       <h2>Mi seguimiento (acciones por hacer)</h2>
@@ -1249,11 +1311,16 @@
         case 'period': changePeriod(id); break;
         case 'print': printSummary(); break;
         case 'tour': if (state.currentAgentId) { location.hash = '#/'; setTimeout(KGC.tour.start, 300); } else KGC.tour.start(); break;
-        case 'add-goal': goalForm(null, el.dataset.type); break;
+        case 'tab': setTab(el.dataset.tab); break;
+        case 'main-goal': mainGoalForm(el.dataset.type); break;
+        case 'goal-step': stepGoal(id, Number(el.dataset.delta)); break;
+        case 'ficha-convert': fichaConvert(); break;
+        case 'progress': progressForm(state.data.agents.find((a) => a.id === id)); break;
+        case 'add-goal': goalForm(null); break;
         case 'edit-goal': goalForm(state.data.goals.find((g) => g.id === id)); break;
         case 'delete-goal': deleteGoal(id); break;
-        case 'add-agent': agentForm(null); break;
-        case 'edit-agent': agentForm(state.data.agents.find((a) => a.id === id)); break;
+        case 'add-agent': agentForm(); break;
+
         case 'delete-agent': deleteAgent(id); break;
         case 'view-agent': location.hash = `#/agente/${encodeURIComponent(id)}`; break;
         case 'import-agents': importAgents(el.dataset.from); break;
@@ -1273,5 +1340,6 @@
     document.addEventListener('visibilitychange', () => { if (document.hidden) flushFicha(); });
   }
 
+  KGC.app = { setTab };
   document.addEventListener('DOMContentLoaded', init);
 })();

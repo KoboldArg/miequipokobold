@@ -4,37 +4,37 @@ window.KGC = window.KGC || {};
 KGC.tour = (function () {
   const STEPS = [
     {
-      el: '.period-bar',
+      el: '.period-bar', tab: 'resumen',
       title: 'Elegí el período',
       text: 'Cada período guarda su información por separado. Tocá P12 o P13 para ver y cargar los datos de ese período.',
     },
     {
-      el: '#sec-summary',
-      title: 'Cómo viene tu equipo',
-      text: 'Las ventas y demos de todo el equipo frente al objetivo. La parte rayada son las demos agendadas que todavía no se hicieron.',
+      el: '#tabs', tab: 'resumen',
+      title: 'Tres pestañas',
+      text: 'Resumen: cómo viene tu equipo. Mis agentes: cada una con sus números. Seguimiento: lo que vas a hacer esta semana.',
     },
     {
-      el: '#sec-goals',
-      title: 'Los objetivos de tu equipo',
-      text: 'Definí qué querés lograr en el período: ventas, demos, reclutamiento u otro. Las ventas y demos se suman solas con lo que cargás en cada agente.',
+      el: '#sec-summary', tab: 'resumen',
+      title: 'Objetivos de tu equipo',
+      text: 'Tocá «Definir objetivo» en Ventas, Demos y Agentes nuevas y escribí el número. El avance se suma solo con lo que cargás en cada agente.',
     },
     {
-      el: '#sec-agents',
-      title: 'Tus agentes',
-      text: 'Agregá a cada agente con su objetivo de ventas y de demos. En "Ver seguimiento" abrís su ficha y actualizás lo que va haciendo con los botones + y −.',
-    },
-    {
-      el: '#sec-compare',
+      el: '#sec-compare', tab: 'resumen',
       title: 'Cómo viene cada agente',
       text: 'Todas tus agentes comparadas. El color te ayuda a ver quién avanza bien y a quién conviene acompañar más.',
     },
     {
-      el: '#sec-actions',
+      el: '#sec-agents', tab: 'agentes',
+      title: 'Tus agentes',
+      text: 'Agregá a cada agente con sus objetivos. Cada semana tocá «Cargar avance» para sumar ventas y demos. En «Ver ficha» está todo su seguimiento.',
+    },
+    {
+      el: '#sec-actions', tab: 'seguimiento',
       title: 'Tu seguimiento de la semana',
       text: 'Anotá las acciones concretas que vas a hacer con cada agente y marcalas cuando las termines.',
     },
     {
-      el: '[data-act="print"]',
+      el: '[data-act="print"]', tab: 'resumen',
       title: 'Imprimir el resumen',
       text: 'Imprimí o guardá en PDF un resumen del equipo para llevar a tus reuniones.',
     },
@@ -50,7 +50,8 @@ KGC.tour = (function () {
   let nodes = null;
   let raf = 0;
 
-  const visible = (el) => el && !el.closest('[hidden]') && el.getClientRects().length > 0;
+  /* Se saltea un paso si su parte no existe o está oculta a propósito (no por estar en otra pestaña). */
+  const available = (el) => el && !el.hidden;
 
   function build() {
     const block = document.createElement('div');
@@ -123,6 +124,7 @@ KGC.tour = (function () {
     if (i < 0 || i >= steps.length) return;
     index = i;
     const step = steps[i];
+    if (step.tab && KGC.app) KGC.app.setTab(step.tab);
     const target = document.querySelector(step.el);
     const header = document.querySelector('.topbar');
     const offset = (header ? header.offsetHeight : 0) + 16;
@@ -149,7 +151,7 @@ KGC.tour = (function () {
 
   function start() {
     if (nodes) stop();
-    steps = STEPS.filter((s) => visible(document.querySelector(s.el)));
+    steps = STEPS.filter((s) => available(document.querySelector(s.el)));
     if (!steps.length) return;
     nodes = build();
     document.body.classList.add('tour-open');

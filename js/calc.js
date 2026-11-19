@@ -29,6 +29,7 @@ KGC.calc = (function () {
         t.sales += n(a.sales);
         t.demos += n(a.demosDone);
         t.demosScheduled += n(a.demosScheduled);
+        if (a.isNew) t.newAgents += 1;
         if (a.status !== 'inactiva') {
           t.active += 1;
           t.salesTargets += n(a.target);
@@ -36,7 +37,7 @@ KGC.calc = (function () {
         }
         return t;
       },
-      { count: 0, active: 0, sales: 0, demos: 0, demosScheduled: 0, salesTargets: 0, demosTargets: 0 }
+      { count: 0, active: 0, newAgents: 0, sales: 0, demos: 0, demosScheduled: 0, salesTargets: 0, demosTargets: 0 }
     );
   }
 
@@ -49,21 +50,28 @@ KGC.calc = (function () {
     return '#F0415F';
   }
 
-  /* Cantidad alcanzada de un objetivo del equipo.
-   * Ventas y Demos pueden calcularse automáticamente con los datos de las agentes;
-   * Reclutamiento y Otro siempre se cargan a mano. */
-  function goalAchieved(goal, totals) {
-    if (goal.auto && goal.type === 'ventas') return totals.sales;
-    if (goal.auto && goal.type === 'demos') return totals.demos;
-    return n(goal.achieved);
+  /* Objetivos del equipo.
+   * Ventas, Demos y Reclutamiento son objetivos fijos (uno por período) y su avance
+   * se calcula solo con los datos de las agentes. "Otros" objetivos se cargan a mano. */
+  const MAIN_TYPES = ['ventas', 'demos', 'reclutamiento'];
+
+  function mainGoals(goals) {
+    const out = {};
+    MAIN_TYPES.forEach((type) => { out[type] = goals.find((g) => g.type === type) || null; });
+    return out;
   }
 
-  /* El objetivo general de ventas (o de demos) del equipo es el primer objetivo de ese tipo. */
-  function teamSalesGoal(goals) {
-    return goals.find((g) => g.type === 'ventas') || null;
+  function otherGoals(goals) {
+    const main = mainGoals(goals);
+    const ids = new Set(Object.values(main).filter(Boolean).map((g) => g.id));
+    return goals.filter((g) => !ids.has(g.id));
   }
-  function teamDemosGoal(goals) {
-    return goals.find((g) => g.type === 'demos') || null;
+
+  function mainAchieved(type, totals) {
+    if (type === 'ventas') return totals.sales;
+    if (type === 'demos') return totals.demos;
+    if (type === 'reclutamiento') return totals.newAgents;
+    return 0;
   }
 
   /* Situación de una agente: se mide por su objetivo de ventas;
@@ -83,8 +91,9 @@ KGC.calc = (function () {
     if (pct >= thresholds.follow) return { key: 'amarillo', label: 'Necesita seguimiento', color: '#FAD400', order: 2 };
     const hasActivity = n(agent.demosDone) > 0 || n(agent.sales) > 0 || n(agent.demosScheduled) > 0;
     if (hasActivity) return { key: 'naranja', label: 'Requiere atención', color: '#F5A01E', order: 3 };
+    if (agent.isNew) return { key: 'nueva', label: 'Recién empieza', color: '#734BA5', order: 4 };
     return { key: 'rojo', label: 'Necesita intervención', color: '#F0415F', order: 4 };
   }
 
-  return { n, hasTarget, percent, pending, barWidth, teamTotals, levelColor, goalAchieved, teamSalesGoal, teamDemosGoal, agentSituation };
+  return { n, hasTarget, percent, pending, barWidth, teamTotals, levelColor, MAIN_TYPES, mainGoals, otherGoals, mainAchieved, agentSituation };
 })();
