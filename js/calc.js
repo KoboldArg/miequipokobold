@@ -21,17 +21,32 @@ KGC.calc = (function () {
   /* Ancho de barra entre 0 y 100. */
   const barWidth = (pct) => (pct == null ? 0 : Math.max(0, Math.min(pct, 100)));
 
+  /* Totales del equipo. Los objetivos individuales se suman solo de las agentes activas. */
   function teamTotals(agents) {
     return agents.reduce(
       (t, a) => {
         t.count += 1;
-        if (a.status !== 'inactiva') t.active += 1;
         t.sales += n(a.sales);
         t.demos += n(a.demosDone);
+        t.demosScheduled += n(a.demosScheduled);
+        if (a.status !== 'inactiva') {
+          t.active += 1;
+          t.salesTargets += n(a.target);
+          t.demosTargets += n(a.demosTarget);
+        }
         return t;
       },
-      { count: 0, active: 0, sales: 0, demos: 0 }
+      { count: 0, active: 0, sales: 0, demos: 0, demosScheduled: 0, salesTargets: 0, demosTargets: 0 }
     );
+  }
+
+  /* Color de una barra según el porcentaje alcanzado. */
+  function levelColor(pct) {
+    if (pct == null) return '#A3A3A3';
+    if (pct >= thresholds.good) return '#00AC46';
+    if (pct >= thresholds.follow) return '#FAD400';
+    if (pct > 0) return '#F5A01E';
+    return '#F0415F';
   }
 
   /* Cantidad alcanzada de un objetivo del equipo.
@@ -43,27 +58,33 @@ KGC.calc = (function () {
     return n(goal.achieved);
   }
 
-  /* El objetivo general de ventas del equipo es el primer objetivo de tipo Ventas. */
+  /* El objetivo general de ventas (o de demos) del equipo es el primer objetivo de ese tipo. */
   function teamSalesGoal(goals) {
     return goals.find((g) => g.type === 'ventas') || null;
   }
+  function teamDemosGoal(goals) {
+    return goals.find((g) => g.type === 'demos') || null;
+  }
 
-  /* Situación de una agente respecto de su objetivo individual de ventas. */
+  /* Situación de una agente: se mide por su objetivo de ventas;
+   * si no tiene objetivo de ventas pero sí de demos, se mide por demos. */
   function agentSituation(agent) {
     if (agent.status === 'inactiva') {
       return { key: 'inactiva', label: 'Inactiva', color: '#A3A3A3', order: 6 };
     }
-    const pct = percent(agent.sales, agent.target);
+    const pct = hasTarget(agent.target)
+      ? percent(agent.sales, agent.target)
+      : percent(agent.demosDone, agent.demosTarget);
     if (pct == null) {
       return { key: 'sin-objetivo', label: 'Sin objetivo definido', color: '#A3A3A3', order: 5 };
     }
     if (pct >= 100) return { key: 'verde', label: 'Meta alcanzada', color: '#00AC46', order: 0 };
     if (pct >= thresholds.good) return { key: 'verde', label: 'Buen avance', color: '#00AC46', order: 1 };
     if (pct >= thresholds.follow) return { key: 'amarillo', label: 'Necesita seguimiento', color: '#FAD400', order: 2 };
-    const hasActivity = n(agent.demosDone) > 0 || n(agent.sales) > 0;
+    const hasActivity = n(agent.demosDone) > 0 || n(agent.sales) > 0 || n(agent.demosScheduled) > 0;
     if (hasActivity) return { key: 'naranja', label: 'Requiere atención', color: '#F5A01E', order: 3 };
     return { key: 'rojo', label: 'Necesita intervención', color: '#F0415F', order: 4 };
   }
 
-  return { n, hasTarget, percent, pending, barWidth, teamTotals, goalAchieved, teamSalesGoal, agentSituation };
+  return { n, hasTarget, percent, pending, barWidth, teamTotals, levelColor, goalAchieved, teamSalesGoal, teamDemosGoal, agentSituation };
 })();

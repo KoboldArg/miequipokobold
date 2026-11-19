@@ -158,9 +158,46 @@
     const d = await store.getPeriod(state.tl.id, state.periodId);
     state.data = {
       goals: d.goals.slice().sort(byCreated),
-      agents: d.agents.slice().sort(byName),
+      agents: d.agents.map(normalizeAgent).sort(byName),
       actions: d.actions.slice(),
     };
+  }
+
+  /* Compatibilidad con la versión anterior: "demos planificadas" pasa a ser el objetivo de demos. */
+  function normalizeAgent(a) {
+    const x = Object.assign({}, a);
+    if (x.demosTarget === undefined) x.demosTarget = x.demosPlanned == null ? null : n(x.demosPlanned);
+    if (x.demosScheduled === undefined) x.demosScheduled = 0;
+    delete x.demosPlanned;
+    return x;
+  }
+
+  /* Barra de avance: hechas (color lleno) + agendadas (mismo color, más claro). */
+  function metric({ label, done, target, scheduled = null, unit, compact = false }) {
+    const pct = calc.percent(done, target);
+    const color = calc.levelColor(pct);
+    const has = calc.hasTarget(target);
+    const left = calc.pending(done, target);
+    const doneW = calc.barWidth(pct);
+    const schedW = has && scheduled ? Math.min(100 - doneW, Math.round((n(scheduled) / n(target)) * 100)) : 0;
+    let foot = !has
+      ? 'Sin objetivo definido'
+      : left > 0 ? `${pct}% · faltan ${left}` : `${pct}% · ¡objetivo cumplido!`;
+    if (compact) foot = has ? `<b>${n(done)} de ${n(target)}</b> · ${pct}%` : `<b>${n(done)}</b> · sin objetivo`;
+    return `
+      <div class="metric ${compact ? 'metric-compact' : ''}">
+        <div class="metric-top">
+          <span class="metric-label">${label}</span>
+          <span class="metric-val"><b>${n(done)}</b>${has ? ` de ${n(target)}` : ''} ${unit}</span>
+        </div>
+        <div class="bar bar-split" role="img" aria-label="${n(done)} ${unit} hechas${has ? ` de ${n(target)}` : ''}${scheduled ? `, ${n(scheduled)} agendadas` : ''}">
+          <span style="width:${doneW}%;background:${color}"></span>${schedW ? `<span class="sched" style="width:${schedW}%;background:${color}"></span>` : ''}
+        </div>
+        <div class="metric-foot">
+          <span>${foot}</span>
+          ${scheduled ? `<span class="sched-note"><i style="background:${color}"></i>${n(scheduled)} agendada${n(scheduled) === 1 ? '' : 's'}</span>` : ''}
+        </div>
+      </div>`;
   }
 
   async function mutate(fn, okMsg) {
@@ -235,7 +272,8 @@
     $('#screen-app').hidden = false;
     renderHeader();
     await loadPeriod();
-    route();
+    await route();
+    if (!state.currentAgentId) KGC.tour.startOnce();
   }
 
   /* ---------------- Navegación ---------------- */
@@ -304,6 +342,7 @@
   }
 
   async function logout() {
+    KGC.tour.stop();
     await flushFicha();
     await store.clearSession();
     state.tl = null;
@@ -429,7 +468,7 @@
           if (t.auto) {
             autoWrap.hidden = false;
             const what = type === 'ventas' ? 'ventas' : 'demos';
-            $('#auto-text', form).innerHTML = `<b>Calcular automáticamente</b> con las ${what} cargadas en las fichas de mis agentes (hoy: ${type === 'ventas' ? totals.sales : totals.demos}).`;
+            $('#auto-text', form).innerHTML = `<b>Calcular automáticamente</b> con las ${what} hechas que cargaste en cada agente (hoy: ${type === 'ventas' ? totals.sales : totals.demos}).`;
             const auto = form.elements.auto.checked;
             achievedInput.disabled = auto;
             stepBtns.forEach((b) => { b.disabled = auto; });
@@ -480,58 +519,52 @@
   }
 
   /* ----- D. Resumen ----- */
+  function teamCard({ kind, goal, done, scheduled, individualSum, t }) {
+    const isSales = kind === 'ventas';
+    const unit = isSales ? 'ventas' : 'demos';
+    const title = isSales ? 'Ventas del equipo' : 'Demos del equipo';
+    const icon = isSales ? ICONS.bag : ICONS.demo;
+    let body;
+    if (goal && calc.hasTarget(goal.target)) {
+      body = metric({ label: 'Objetivo del equipo', done, target: goal.target, scheduled, unit });
+      const diff = n(goal.target) - individualSum;
+      let split;
+      if (!t.active) split = '';
+      else if (!individualSum) split = `Todavía no repartiste objetivos de ${unit} entre tus agentes.`;
+      else if (diff > 0) split = `Objetivos individuales: <b>${individualSum}</b>. Te faltan repartir <b>${diff}</b>.`;
+      else if (diff < 0) split = `Objetivos individuales: <b>${individualSum}</b>, ${-diff} más que el del equipo.`;
+      else split = `Objetivos individuales: <b>${individualSum}</b>. Coinciden con el del equipo ✓`;
+      if (split) body += `<p class="team-split">${split}</p>`;
+    } else {
+      body = `
+        <span class="stat-value">${done}</span>
+        <span class="stat-sub">${unit} hechas${scheduled ? ` · ${scheduled} agendadas` : ''}</span>
+        ${goal
+          ? `<button class="btn btn-primary btn-sm" data-act="edit-goal" data-id="${goal.id}">Completar objetivo</button>`
+          : `<button class="btn btn-primary btn-sm" data-act="add-goal" data-type="${kind}">+ Definir objetivo de ${unit}</button>`}`;
+    }
+    return `
+      <div class="stat stat-team" style="--icon:${isSales ? 'var(--green)' : 'var(--blue)'}">
+        <div class="stat-team-head"><span class="stat-icon">${icon}</span><span class="stat-label">${title}</span></div>
+        ${body}
+      </div>`;
+  }
+
   function renderSummary() {
     const { agents, goals } = state.data;
     const t = calc.teamTotals(agents);
     const sg = calc.teamSalesGoal(goals);
-    const salesGoalsCount = goals.filter((g) => g.type === 'ventas').length;
-
-    let goalBody;
-    if (sg && calc.hasTarget(sg.target)) {
-      const achieved = calc.goalAchieved(sg, t);
-      const pct = calc.percent(achieved, sg.target);
-      const left = calc.pending(achieved, sg.target);
-      goalBody = `
-        <span class="stat-value">${achieved} <small>de ${n(sg.target)} ventas</small></span>
-        <div class="bar bar-lg" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${calc.barWidth(pct)}"><span style="width:${calc.barWidth(pct)}%"></span></div>
-        <div class="stat-goal-foot">
-          <span>${pct}% de avance</span>
-          <span>${left > 0 ? `Faltan ${left} ${left === 1 ? 'venta' : 'ventas'}` : '¡Objetivo alcanzado!'}</span>
-        </div>
-        ${salesGoalsCount > 1 ? `<span class="stat-sub">Según tu objetivo "${esc(goalTitle(sg))}".</span>` : ''}
-        ${!sg.auto ? '<span class="stat-sub">Usa la cantidad alcanzada que cargaste a mano en el objetivo.</span>' : ''}`;
-    } else if (sg) {
-      goalBody = `
-        <span class="stat-sub">Falta definir la cantidad.</span>
-        <button class="btn btn-primary btn-sm" data-act="edit-goal" data-id="${sg.id}">Completar cantidad</button>`;
-    } else {
-      goalBody = `
-        <span class="stat-sub">Todavía sin definir.</span>
-        <button class="btn btn-primary btn-sm" data-act="add-goal" data-type="ventas">+ Definir objetivo de ventas</button>`;
-    }
+    const dg = calc.teamDemosGoal(goals);
 
     $('#summary').innerHTML = `
-      <div class="stat" style="--icon:var(--purple)">
+      <div class="stat stat-agents" style="--icon:var(--purple)">
         <span class="stat-icon">${ICONS.users}</span>
         <span class="stat-label">Agentes en mi equipo</span>
         <span class="stat-value">${t.count}</span>
         <span class="stat-sub">${t.count ? `${t.active} ${t.active === 1 ? 'activa' : 'activas'}` : '&nbsp;'}</span>
       </div>
-      <div class="stat" style="--icon:var(--green)">
-        <span class="stat-icon">${ICONS.bag}</span>
-        <span class="stat-label">Ventas realizadas</span>
-        <span class="stat-value">${t.sales}</span>
-      </div>
-      <div class="stat" style="--icon:var(--blue)">
-        <span class="stat-icon">${ICONS.demo}</span>
-        <span class="stat-label">Demos realizadas</span>
-        <span class="stat-value">${t.demos}</span>
-      </div>
-      <div class="stat stat-goal">
-        <span class="stat-icon">${ICONS.flag}</span>
-        <span class="stat-label">Objetivo de ventas del equipo</span>
-        ${goalBody}
-      </div>`;
+      ${teamCard({ kind: 'ventas', goal: sg, done: sg ? calc.goalAchieved(sg, t) : t.sales, scheduled: null, individualSum: t.salesTargets, t })}
+      ${teamCard({ kind: 'demos', goal: dg, done: dg ? calc.goalAchieved(dg, t) : t.demos, scheduled: t.demosScheduled, individualSum: t.demosTargets, t })}`;
   }
 
   /* ----- 4. Mis agentes ----- */
@@ -613,15 +646,14 @@
 
   function emptyAgent(extra) {
     return Object.assign({
-      name: '', status: 'activa', personalGoal: '', target: null,
-      demosPlanned: null, demosDone: 0, sales: 0,
+      name: '', status: 'activa', personalGoal: '',
+      target: null, sales: 0,
+      demosTarget: null, demosDone: 0, demosScheduled: 0,
       notes: '', needs: '', nextAction: '', followUpDate: '',
     }, extra);
   }
 
   function agentCard(a) {
-    const pct = calc.percent(a.sales, a.target);
-    const left = calc.pending(a.sales, a.target);
     const sit = calc.agentSituation(a);
     const inactive = a.status === 'inactiva';
     return `
@@ -636,19 +668,8 @@
             </div>
           </div>
         </div>
-        <div class="agent-stats">
-          <div><b>${calc.hasTarget(a.target) ? n(a.target) : '–'}</b><span>Objetivo</span></div>
-          <div><b>${n(a.demosDone)}</b><span>Demos</span></div>
-          <div><b>${n(a.sales)}</b><span>Ventas</span></div>
-        </div>
-        <div class="agent-progress">
-          <div class="bar"><span style="width:${calc.barWidth(pct)}%;background:${sit.color}"></span></div>
-          <div class="agent-progress-label">
-            ${pct == null
-              ? '<span>Sin objetivo individual definido</span>'
-              : `<span><b>${pct}%</b> de su objetivo</span><span>${left > 0 ? `Faltan ${left}` : '¡Meta alcanzada!'}</span>`}
-          </div>
-        </div>
+        ${metric({ label: 'Ventas', done: a.sales, target: a.target, unit: 'ventas' })}
+        ${metric({ label: 'Demos', done: a.demosDone, target: a.demosTarget, scheduled: a.demosScheduled, unit: 'demos' })}
         ${a.nextAction ? `<div class="next-action"><b>Próxima acción</b>${esc(a.nextAction)}${a.followUpDate ? ` · ${fmtDate(a.followUpDate)}` : ''}</div>` : ''}
         <div class="agent-foot">
           <button class="btn btn-soft btn-sm" data-act="view-agent" data-id="${a.id}">Ver seguimiento</button>
@@ -671,13 +692,24 @@
             <span class="field-label">Estado</span>
             ${choiceGroup('status', [{ value: 'activa', label: 'Activa' }, { value: 'inactiva', label: 'Inactiva', color: '#707070' }], a.status)}
           </div>
-          <p class="form-section-title">Su período ${esc(periodLabel())}</p>
-          <div class="form-row-2">
-            ${stepperField('target', 'Objetivo de ventas', a.target, { placeholder: 'Sin definir' })}
-            ${stepperField('sales', 'Ventas realizadas', n(a.sales))}
-            ${stepperField('demosDone', 'Demos realizadas', n(a.demosDone))}
-            ${stepperField('demosPlanned', 'Demos planificadas', a.demosPlanned, { optional: true, placeholder: 'Sin definir' })}
+
+          <div class="form-block form-block-sales">
+            <p class="form-block-title">${ICONS.bag} Ventas · ${esc(periodLabel())}</p>
+            <div class="form-row-2">
+              ${stepperField('target', 'Objetivo de ventas', a.target, { placeholder: 'Sin definir', help: 'Lo que le proponés para el período' })}
+              ${stepperField('sales', 'Ventas hechas', n(a.sales), { help: 'Ventas ya concretadas' })}
+            </div>
           </div>
+
+          <div class="form-block form-block-demos">
+            <p class="form-block-title">${ICONS.demo} Demos · ${esc(periodLabel())}</p>
+            <div class="form-row-2">
+              ${stepperField('demosTarget', 'Objetivo de demos', a.demosTarget, { placeholder: 'Sin definir', help: 'Lo que le proponés para el período' })}
+              ${stepperField('demosDone', 'Demos hechas', n(a.demosDone), { help: 'Demos que ya hizo' })}
+              ${stepperField('demosScheduled', 'Demos agendadas', n(a.demosScheduled), { help: 'Con fecha, todavía no hechas' })}
+            </div>
+          </div>
+
           ${textField('nextAction', 'Próxima acción a realizar', a.nextAction, { optional: true, placeholder: 'Ej.: acompañarla en su próxima demo' })}
           <details class="more" ${!isNew && (a.notes || a.needs || a.personalGoal || a.followUpDate) ? 'open' : ''}>
             <summary>Seguimiento <span class="opt">&nbsp;(opcional)</span></summary>
@@ -698,8 +730,9 @@
           status: el.status.value === 'inactiva' ? 'inactiva' : 'activa',
           target: intOrNull(el.target.value),
           sales: n(el.sales.value),
+          demosTarget: intOrNull(el.demosTarget.value),
           demosDone: n(el.demosDone.value),
-          demosPlanned: intOrNull(el.demosPlanned.value),
+          demosScheduled: n(el.demosScheduled.value),
           nextAction: el.nextAction.value.trim(),
           personalGoal: el.personalGoal.value.trim(),
           needs: el.needs.value.trim(),
@@ -740,29 +773,31 @@
       return;
     }
     $('#sec-compare').hidden = false;
+    const pctOf = (a) => {
+      const p = calc.hasTarget(a.target) ? calc.percent(a.sales, a.target) : calc.percent(a.demosDone, a.demosTarget);
+      return p == null ? -1 : p;
+    };
     const rows = agents.slice().sort((a, b) => {
-      const sa = calc.agentSituation(a), sb = calc.agentSituation(b);
-      const pa = calc.percent(a.sales, a.target), pb = calc.percent(b.sales, b.target);
-      if ((sa.order >= 5) !== (sb.order >= 5)) return sa.order >= 5 ? 1 : -1;
-      if (pa != null && pb != null && pa !== pb) return pb - pa;
+      const ia = a.status === 'inactiva', ib = b.status === 'inactiva';
+      if (ia !== ib) return ia ? 1 : -1;
+      if (pctOf(a) !== pctOf(b)) return pctOf(b) - pctOf(a);
       return byName(a, b);
     });
     $('#compare').innerHTML = `
       <div class="legend">
-        <span><span class="dot" style="--dot:var(--green)"></span>Buen avance o meta alcanzada</span>
+        <span><span class="dot" style="--dot:var(--green)"></span>Buen avance</span>
         <span><span class="dot" style="--dot:var(--yellow)"></span>Necesita seguimiento</span>
         <span><span class="dot" style="--dot:var(--orange)"></span>Requiere atención</span>
         <span><span class="dot" style="--dot:var(--red)"></span>Necesita intervención</span>
-        <span><span class="dot" style="--dot:var(--gray)"></span>Sin objetivo o inactiva</span>
+        <span><span class="legend-sched"></span>Demos agendadas</span>
       </div>
       <div class="compare-row compare-head">
-        <span>Agente</span><span class="compare-num">Objetivo</span><span class="compare-num">Demos</span><span class="compare-num">Ventas</span><span>Avance</span>
+        <span>Agente</span><span>Ventas</span><span>Demos</span>
       </div>
       ${rows.map((a) => {
-        const pct = calc.percent(a.sales, a.target);
         const sit = calc.agentSituation(a);
         return `
-          <div class="compare-row">
+          <div class="compare-row ${a.status === 'inactiva' ? 'is-inactive' : ''}">
             <div class="compare-name">
               <span class="dot" style="--dot:${sit.color}" title="${esc(sit.label)}"></span>
               <div>
@@ -770,13 +805,8 @@
                 <span class="compare-situation">${esc(sit.label)}</span>
               </div>
             </div>
-            <span class="compare-num"><small>Objetivo</small>${calc.hasTarget(a.target) ? n(a.target) : '–'}</span>
-            <span class="compare-num"><small>Demos</small>${n(a.demosDone)}</span>
-            <span class="compare-num"><small>Ventas</small>${n(a.sales)}</span>
-            <div class="compare-bar">
-              <div class="bar"><span style="width:${calc.barWidth(pct)}%;background:${sit.color}"></span></div>
-              ${pct == null ? '<span class="pct none">Sin objetivo</span>' : `<span class="pct">${pct}%</span>`}
-            </div>
+            ${metric({ label: 'Ventas', done: a.sales, target: a.target, unit: '', compact: true })}
+            ${metric({ label: 'Demos', done: a.demosDone, target: a.demosTarget, scheduled: a.demosScheduled, unit: '', compact: true })}
           </div>`;
       }).join('')}`;
   }
@@ -953,22 +983,26 @@
         <section class="ficha-card">
           <h2><span class="num">1</span>Su objetivo</h2>
           ${fichaText('personalGoal', '¿Qué quiere conseguir?', a.personalGoal, true, 'Ej.: lograr sus primeras 3 ventas para acceder al incentivo')}
-          ${fichaStepper('target', 'Ventas que se propone realizar', a.target, 'Sin definir')}
+          <p class="ficha-sub">Objetivos que le proponés para ${esc(periodLabel())}</p>
+          <div class="form-row-2">
+            ${fichaStepper('target', 'Objetivo de ventas', a.target, 'Sin definir')}
+            ${fichaStepper('demosTarget', 'Objetivo de demos', a.demosTarget, 'Sin definir')}
+          </div>
         </section>
 
         <section class="ficha-card" style="--num-bg:#EAF2FA;--num-fg:#3782CD">
-          <h2><span class="num">2</span>Su actividad</h2>
+          <h2><span class="num">2</span>Sus demos</h2>
           <div class="form-row-2">
-            ${fichaStepper('demosPlanned', 'Demos planificadas', a.demosPlanned, 'Sin definir')}
-            ${fichaStepper('demosDone', 'Demos realizadas', n(a.demosDone))}
+            ${fichaStepper('demosDone', 'Demos hechas', n(a.demosDone))}
+            ${fichaStepper('demosScheduled', 'Demos agendadas', n(a.demosScheduled))}
           </div>
-          <div id="ficha-activity"></div>
+          <div id="ficha-demos"></div>
         </section>
 
         <section class="ficha-card">
-          <h2><span class="num">3</span>Sus resultados</h2>
-          ${fichaStepper('sales', 'Ventas concretadas', n(a.sales))}
-          <div id="ficha-results"></div>
+          <h2><span class="num">3</span>Sus ventas</h2>
+          ${fichaStepper('sales', 'Ventas hechas', n(a.sales))}
+          <div id="ficha-sales"></div>
         </section>
 
         <section class="ficha-card" style="--num-bg:#FEF4E4;--num-fg:#B66F00">
@@ -1027,8 +1061,8 @@
 
   function fichaValue(el) {
     const f = el.dataset.field;
-    if (['target', 'demosPlanned'].includes(f)) return intOrNull(el.value);
-    if (['demosDone', 'sales'].includes(f)) return n(el.value);
+    if (['target', 'demosTarget'].includes(f)) return intOrNull(el.value);
+    if (['demosDone', 'demosScheduled', 'sales'].includes(f)) return n(el.value);
     if (f === 'name') return el.value.trim().replace(/\s+/g, ' ');
     if (f === 'status') return el.value === 'inactiva' ? 'inactiva' : 'activa';
     return el.type === 'date' ? el.value : el.value.trim();
@@ -1096,28 +1130,25 @@
     const av = $('#ficha-avatar');
     if (av && a.name) av.textContent = initials(a.name);
 
-    const pct = calc.percent(a.sales, a.target);
-    const left = calc.pending(a.sales, a.target);
-    const res = $('#ficha-results');
-    if (res) {
-      res.innerHTML = pct == null
-        ? `<div class="big-progress"><span>Definí en "Su objetivo" cuántas ventas se propone para ver su avance.</span></div>`
-        : `<div class="big-progress">
-            <div class="line"><strong>${n(a.sales)} de ${n(a.target)} ventas</strong><span class="pct" style="color:${sit.key === 'amarillo' ? '#8A7500' : sit.color}">${pct}%</span></div>
-            <div class="bar bar-lg"><span style="width:${calc.barWidth(pct)}%;background:${sit.color}"></span></div>
-            <span>${left > 0 ? `Le ${left === 1 ? 'falta' : 'faltan'} <b>${left}</b> ${left === 1 ? 'venta' : 'ventas'} para su objetivo.` : '<b>¡Alcanzó su objetivo!</b>'}</span>
-          </div>`;
+    const salesBox = $('#ficha-sales');
+    if (salesBox) {
+      salesBox.innerHTML = `<div class="big-progress">${calc.hasTarget(a.target)
+        ? metric({ label: 'Avance de ventas', done: a.sales, target: a.target, unit: 'ventas' })
+        : '<span>Definí su objetivo de ventas en "Su objetivo" para ver el avance.</span>'}</div>`;
     }
-    const act = $('#ficha-activity');
-    if (act) {
-      const planned = n(a.demosPlanned);
-      const dp = calc.percent(a.demosDone, a.demosPlanned);
-      act.innerHTML = planned > 0
-        ? `<div class="big-progress">
-            <div class="line"><span><b>${n(a.demosDone)}</b> de ${planned} demos planificadas</span><span class="pct" style="color:var(--blue)">${dp}%</span></div>
-            <div class="bar"><span style="width:${calc.barWidth(dp)}%;background:var(--blue)"></span></div>
-          </div>`
-        : '';
+    const demosBox = $('#ficha-demos');
+    if (demosBox) {
+      const sched = n(a.demosScheduled);
+      const reach = n(a.demosDone) + sched;
+      let note = '';
+      if (calc.hasTarget(a.demosTarget) && sched) {
+        note = reach >= n(a.demosTarget)
+          ? '<p class="ficha-note">Si hace las demos agendadas, <b>cumple su objetivo</b>.</p>'
+          : `<p class="ficha-note">Si hace las agendadas llega a <b>${reach} de ${n(a.demosTarget)}</b>: le faltaría agendar ${n(a.demosTarget) - reach}.</p>`;
+      }
+      demosBox.innerHTML = `<div class="big-progress">${calc.hasTarget(a.demosTarget)
+        ? metric({ label: 'Avance de demos', done: a.demosDone, target: a.demosTarget, scheduled: sched, unit: 'demos' }) + note
+        : '<span>Definí su objetivo de demos en "Su objetivo" para ver el avance.</span>'}</div>`;
     }
   }
 
@@ -1135,8 +1166,13 @@
     const { goals, agents, actions } = state.data;
     const totals = calc.teamTotals(agents);
     const sg = calc.teamSalesGoal(goals);
-    const sgAchieved = sg ? calc.goalAchieved(sg, totals) : 0;
-    const salesPct = sg ? calc.percent(sgAchieved, sg.target) : null;
+    const dg = calc.teamDemosGoal(goals);
+    const teamLine = (goal, fallback, unit) => {
+      const done = goal ? calc.goalAchieved(goal, totals) : fallback;
+      if (!goal || !calc.hasTarget(goal.target)) return `<b>${done}</b>${unit} hechas · sin objetivo`;
+      return `<b>${done} de ${n(goal.target)}</b>${calc.percent(done, goal.target)}% · faltan ${calc.pending(done, goal.target)}`;
+    };
+    const fmtGoal = (done, target) => (calc.hasTarget(target) ? `${n(done)} / ${n(target)} (${calc.percent(done, target)}%)` : `${n(done)} / –`);
     const openActions = sortActions(actions.filter((x) => x.status !== 'realizado'));
 
     $('#print-summary').innerHTML = `
@@ -1148,9 +1184,8 @@
       <h2>Resumen del equipo</h2>
       <div class="pr-stats">
         <div>Agentes<b>${totals.count}</b>${totals.active} activas</div>
-        <div>Ventas realizadas<b>${totals.sales}</b></div>
-        <div>Demos realizadas<b>${totals.demos}</b></div>
-        <div>Objetivo de ventas<b>${sg && calc.hasTarget(sg.target) ? `${sgAchieved} de ${n(sg.target)}` : '–'}</b>${salesPct != null ? `${salesPct}% · faltan ${calc.pending(sgAchieved, sg.target)}` : 'Sin definir'}</div>
+        <div>Ventas del equipo${teamLine(sg, totals.sales, ' ventas')}</div>
+        <div>Demos del equipo${teamLine(dg, totals.demos, ' demos')}${totals.demosScheduled ? ` · ${totals.demosScheduled} agendadas` : ''}</div>
       </div>
 
       <h2>Objetivos del equipo</h2>
@@ -1161,10 +1196,9 @@
         }).join('')}</tbody></table>` : '<p class="pr-empty">Sin objetivos cargados.</p>'}
 
       <h2>Mi equipo, agente por agente</h2>
-      ${agents.length ? `<table><thead><tr><th>Agente</th><th>Estado</th><th>Objetivo</th><th>Demos</th><th>Ventas</th><th>Avance</th><th>Situación</th><th>Próxima acción</th></tr></thead><tbody>
+      ${agents.length ? `<table><thead><tr><th>Agente</th><th>Estado</th><th>Ventas (hechas / objetivo)</th><th>Demos (hechas / objetivo)</th><th>Demos agendadas</th><th>Situación</th><th>Próxima acción</th></tr></thead><tbody>
         ${agents.map((a) => {
-          const p = calc.percent(a.sales, a.target);
-          return `<tr><td>${esc(a.name)}</td><td>${a.status === 'inactiva' ? 'Inactiva' : 'Activa'}</td><td>${calc.hasTarget(a.target) ? n(a.target) : '–'}</td><td>${n(a.demosDone)}${a.demosPlanned != null ? ` / ${n(a.demosPlanned)}` : ''}</td><td>${n(a.sales)}</td><td>${p == null ? '–' : p + '%'}</td><td>${esc(calc.agentSituation(a).label)}</td><td>${esc(a.nextAction)}${a.followUpDate ? ` (${fmtDate(a.followUpDate)})` : ''}</td></tr>`;
+          return `<tr><td>${esc(a.name)}</td><td>${a.status === 'inactiva' ? 'Inactiva' : 'Activa'}</td><td>${fmtGoal(a.sales, a.target)}</td><td>${fmtGoal(a.demosDone, a.demosTarget)}</td><td>${n(a.demosScheduled)}</td><td>${esc(calc.agentSituation(a).label)}</td><td>${esc(a.nextAction)}${a.followUpDate ? ` (${fmtDate(a.followUpDate)})` : ''}</td></tr>`;
         }).join('')}</tbody></table>` : '<p class="pr-empty">Sin agentes cargadas.</p>'}
 
       <h2>Mi seguimiento (acciones por hacer)</h2>
@@ -1214,6 +1248,7 @@
         case 'logout': logout(); break;
         case 'period': changePeriod(id); break;
         case 'print': printSummary(); break;
+        case 'tour': if (state.currentAgentId) { location.hash = '#/'; setTimeout(KGC.tour.start, 300); } else KGC.tour.start(); break;
         case 'add-goal': goalForm(null, el.dataset.type); break;
         case 'edit-goal': goalForm(state.data.goals.find((g) => g.id === id)); break;
         case 'delete-goal': deleteGoal(id); break;

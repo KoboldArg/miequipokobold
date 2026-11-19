@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/styles.css?v=6">
 </head>
 <body>
 
@@ -40,13 +40,16 @@
           <span class="logo">KOBOLD</span>
           <span class="brand-title">Gestión comercial de mi equipo</span>
         </a>
+        <button class="btn btn-tour btn-sm" id="btn-tour" data-act="tour" aria-label="¿Cómo se usa? Ver la guía">
+          <span class="q" aria-hidden="true">?</span><span class="tour-label">¿Cómo se usa?</span>
+        </button>
         <div class="tl-box">
           <span class="tl-avatar" id="tl-avatar" aria-hidden="true"></span>
           <div class="tl-text">
             <small>Team Leader</small>
             <strong id="tl-name"></strong>
           </div>
-          <button class="btn btn-ghost btn-sm" data-act="edit-tl">Editar nombre</button>
+          <button class="btn btn-ghost btn-sm" data-act="edit-tl">Editar<span class="hide-sm"> nombre</span></button>
           <button class="btn btn-ghost btn-sm" data-act="logout" title="Volver a la pantalla de inicio">Salir</button>
         </div>
       </div>
@@ -181,9 +184,10 @@
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-  <script src="js/config.js"></script>
-  <script src="js/storage.js"></script>
-  <script src="js/calc.js"></script>
-  <script src="js/app.js"></script>
+  <script src="js/config.js?v=6"></script>
+  <script src="js/storage.js?v=6"></script>
+  <script src="js/calc.js?v=6"></script>
+  <script src="js/tour.js?v=6"></script>
+  <script src="js/app.js?v=6"></script>
 </body>
 </html>

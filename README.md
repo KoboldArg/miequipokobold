@@ -20,7 +20,14 @@ Abrir `index.html` con doble clic (Chrome, Edge, Firefox o Safari). No necesita 
 | `js/calc.js` | Reglas de cálculo (porcentajes, pendientes, totales, situación de cada agente) |
 | `js/storage.js` | **Capa de datos**. Única parte que toca LocalStorage |
 | `js/app.js` | Pantallas e interacción |
+| `js/tour.js` | Tutorial «¿Cómo se usa?» (se abre solo la primera vez) |
 | `supabase/schema.sql` | Esquema propuesto para la base compartida |
+
+## Datos de cada agente
+
+Por período: objetivo de ventas, ventas hechas, objetivo de demos, demos hechas y demos agendadas (con fecha, todavía no hechas), más el seguimiento.
+
+Al cambiar archivos CSS/JS, subir el número `?v=` en `index.html` para que los navegadores carguen la versión nueva.
 
 ## Agregar un período
 
