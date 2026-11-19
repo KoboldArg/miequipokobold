@@ -326,7 +326,6 @@
     $('#period-switch').innerHTML = config.periods.map((p) => `
       <button type="button" class="period-btn" role="radio" aria-checked="${p.id === state.periodId}" data-act="period" data-id="${p.id}">
         <strong>${esc(p.label)}</strong>
-        <span>${p.id === state.periodId ? 'Estás viendo este período' : 'Ver este período'}</span>
       </button>`).join('');
   }
 
@@ -346,14 +345,12 @@
   function renderGoals() {
     const { goals, agents } = state.data;
     const totals = calc.teamTotals(agents);
-    $('#goals-sub').textContent = `Lo que querés alcanzar con tu equipo en ${periodLabel()}.`;
     $('#btn-add-goal-top').hidden = goals.length === 0;
 
     if (!goals.length) {
       $('#goals').innerHTML = `
         <div class="empty">
           <strong>Definí qué querés alcanzar con tu equipo en este período.</strong>
-          <p>Podés sumar objetivos de ventas, reclutamiento, demos u otros.</p>
           <div class="btn-row"><button class="btn btn-primary" data-act="add-goal">+ Agregar objetivo</button></div>
         </div>`;
       return;
@@ -393,8 +390,7 @@
           </div>`
         : `
           <div class="goal-numbers"><strong>${achieved}</strong><span class="of">alcanzadas</span></div>
-          <p class="goal-note">Todavía no definiste la cantidad objetivo. <button class="btn btn-ghost btn-sm" data-act="edit-goal" data-id="${g.id}">Completar</button></p>`}
-        ${g.auto && t.auto ? `<p class="goal-note">${t.autoText}.</p>` : ''}
+          <p class="goal-note">Falta definir la cantidad. <button class="btn btn-ghost btn-sm" data-act="edit-goal" data-id="${g.id}">Completar</button></p>`}
       </article>`;
   }
 
@@ -506,11 +502,11 @@
         ${!sg.auto ? '<span class="stat-sub">Usa la cantidad alcanzada que cargaste a mano en el objetivo.</span>' : ''}`;
     } else if (sg) {
       goalBody = `
-        <span class="stat-sub">Creaste un objetivo de ventas, pero falta definir la cantidad.</span>
+        <span class="stat-sub">Falta definir la cantidad.</span>
         <button class="btn btn-primary btn-sm" data-act="edit-goal" data-id="${sg.id}">Completar cantidad</button>`;
     } else {
       goalBody = `
-        <span class="stat-sub">Todavía no definiste un objetivo de ventas para tu equipo en este período.</span>
+        <span class="stat-sub">Todavía sin definir.</span>
         <button class="btn btn-primary btn-sm" data-act="add-goal" data-type="ventas">+ Definir objetivo de ventas</button>`;
     }
 
@@ -519,19 +515,17 @@
         <span class="stat-icon">${ICONS.users}</span>
         <span class="stat-label">Agentes en mi equipo</span>
         <span class="stat-value">${t.count}</span>
-        <span class="stat-sub">${t.count ? `${t.active} ${t.active === 1 ? 'activa' : 'activas'}` : 'Sin agentes cargadas'}</span>
+        <span class="stat-sub">${t.count ? `${t.active} ${t.active === 1 ? 'activa' : 'activas'}` : '&nbsp;'}</span>
       </div>
       <div class="stat" style="--icon:var(--green)">
         <span class="stat-icon">${ICONS.bag}</span>
         <span class="stat-label">Ventas realizadas</span>
         <span class="stat-value">${t.sales}</span>
-        <span class="stat-sub">Suma de todas tus agentes</span>
       </div>
       <div class="stat" style="--icon:var(--blue)">
         <span class="stat-icon">${ICONS.demo}</span>
         <span class="stat-label">Demos realizadas</span>
         <span class="stat-value">${t.demos}</span>
-        <span class="stat-sub">Suma de todas tus agentes</span>
       </div>
       <div class="stat stat-goal">
         <span class="stat-icon">${ICONS.flag}</span>
@@ -742,9 +736,10 @@
   function renderCompare() {
     const agents = state.data.agents;
     if (!agents.length) {
-      $('#compare').innerHTML = '<p class="section-sub">Cuando agregues agentes, vas a ver acá la comparación de todo tu equipo.</p>';
+      $('#sec-compare').hidden = true;
       return;
     }
+    $('#sec-compare').hidden = false;
     const rows = agents.slice().sort((a, b) => {
       const sa = calc.agentSituation(a), sb = calc.agentSituation(b);
       const pa = calc.percent(a.sales, a.target), pb = calc.percent(b.sales, b.target);
@@ -828,8 +823,7 @@
     if (!all.length) {
       $('#actions').innerHTML = `
         <div class="empty">
-          <strong>Todavía no registraste acciones de seguimiento en ${esc(periodLabel())}.</strong>
-          <p>Anotá qué vas a trabajar con cada agente esta semana: coordinar demos, acompañarla en una demo, conversar sobre su objetivo…</p>
+          <strong>Todavía no hay acciones para esta semana.</strong>
           <div class="btn-row"><button class="btn btn-primary" data-act="add-action">+ Agregar acción</button></div>
         </div>`;
       return;
@@ -958,7 +952,6 @@
       <div class="ficha-grid">
         <section class="ficha-card">
           <h2><span class="num">1</span>Su objetivo</h2>
-          <p class="hint">Qué quiere conseguir y cuántas ventas se propone en este período.</p>
           ${fichaText('personalGoal', '¿Qué quiere conseguir?', a.personalGoal, true, 'Ej.: lograr sus primeras 3 ventas para acceder al incentivo')}
           ${fichaStepper('target', 'Ventas que se propone realizar', a.target, 'Sin definir')}
         </section>
@@ -990,11 +983,11 @@
         </section>
       </div>
 
-      <section class="section">
+      <section class="section sec-actions">
         <div class="section-head">
-          <div>
+          <div class="sec-title">
+            <span class="sec-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M3.5 6l1.2 1.2L7 5M3.5 12l1.2 1.2L7 11M3.5 18l1.2 1.2L7 17"/></svg></span>
             <h2>Acciones de seguimiento con ${esc(a.name.split(' ')[0])}</h2>
-            <p class="section-sub">Estas acciones también aparecen en "Mi seguimiento de esta semana".</p>
           </div>
           <button class="btn btn-primary" data-act="add-action" data-agent="${a.id}">+ Agregar acción</button>
         </div>

@@ -73,19 +73,22 @@
         </section>
 
         <!-- D. Resumen general -->
-        <section class="section section-highlight" id="sec-summary" aria-labelledby="summary-title">
+        <section class="section sec-summary" id="sec-summary" aria-labelledby="summary-title">
           <div class="section-head">
-            <h2 id="summary-title">Resumen de mi equipo</h2>
+            <div class="sec-title">
+              <span class="sec-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></span>
+              <h2 id="summary-title">Resumen de mi equipo</h2>
+            </div>
           </div>
           <div class="summary-grid" id="summary"></div>
         </section>
 
         <!-- C. Objetivos del equipo -->
-        <section class="section" id="sec-goals" aria-labelledby="goals-title">
+        <section class="section sec-goals" id="sec-goals" aria-labelledby="goals-title">
           <div class="section-head">
-            <div>
+            <div class="sec-title">
+              <span class="sec-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/></svg></span>
               <h2 id="goals-title">Los objetivos de mi equipo</h2>
-              <p class="section-sub" id="goals-sub"></p>
             </div>
             <button class="btn btn-primary" data-act="add-goal" id="btn-add-goal-top">+ Agregar objetivo</button>
           </div>
@@ -93,18 +96,21 @@
         </section>
 
         <!-- 4. Mis agentes -->
-        <section class="section" id="sec-agents" aria-labelledby="agents-title">
+        <section class="section sec-agents" id="sec-agents" aria-labelledby="agents-title">
           <div class="section-head">
-            <div>
-              <h2 id="agents-title">Mi equipo, agente por agente</h2>
-              <p class="section-sub">Conocé cómo viene cada una y qué necesita para avanzar.</p>
+            <div class="sec-title">
+              <span class="sec-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6"/></svg></span>
+              <div>
+                <h2 id="agents-title">Mi equipo, agente por agente</h2>
+                <p class="section-sub">Cómo viene cada una y qué necesita.</p>
+              </div>
             </div>
             <button class="btn btn-primary" data-act="add-agent" id="btn-add-agent-top">+ Agregar agente</button>
           </div>
           <div class="toolbar" id="agents-toolbar" hidden>
             <label class="search">
               <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-              <input id="agent-search" type="search" placeholder="Buscar agente por nombre" aria-label="Buscar agente por nombre">
+              <input id="agent-search" type="search" placeholder="Buscar por nombre" aria-label="Buscar agente por nombre">
             </label>
             <div class="chips" id="status-filter" role="radiogroup" aria-label="Filtrar por estado"></div>
           </div>
@@ -112,22 +118,22 @@
         </section>
 
         <!-- 6. Comparativa -->
-        <section class="section" id="sec-compare" aria-labelledby="compare-title">
+        <section class="section sec-compare" id="sec-compare" aria-labelledby="compare-title">
           <div class="section-head">
-            <div>
+            <div class="sec-title">
+              <span class="sec-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 6h10M4 12h16M4 18h7"/></svg></span>
               <h2 id="compare-title">Cómo viene cada agente</h2>
-              <p class="section-sub">Todo el equipo de un vistazo, comparando ventas con el objetivo individual.</p>
             </div>
           </div>
           <div id="compare"></div>
         </section>
 
         <!-- 7. Seguimiento semanal -->
-        <section class="section" id="sec-actions" aria-labelledby="actions-title">
+        <section class="section sec-actions" id="sec-actions" aria-labelledby="actions-title">
           <div class="section-head">
-            <div>
+            <div class="sec-title">
+              <span class="sec-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M3.5 6l1.2 1.2L7 5M3.5 12l1.2 1.2L7 11M3.5 18l1.2 1.2L7 17"/></svg></span>
               <h2 id="actions-title">Mi seguimiento de esta semana</h2>
-              <p class="section-sub">Las acciones concretas que vas a hacer para acompañar a tus agentes.</p>
             </div>
             <button class="btn btn-primary" data-act="add-action" id="btn-add-action-top">+ Agregar acción</button>
           </div>

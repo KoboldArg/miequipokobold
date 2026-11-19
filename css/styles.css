@@ -128,7 +128,19 @@ svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width:
   background: var(--white); border-radius: var(--radius-lg); padding: 28px;
   margin-top: 20px; box-shadow: var(--shadow);
 }
-.section-highlight { border-top: 6px solid var(--green); }
+/* Cada sección tiene su color e ícono para reconocerla de un vistazo */
+.sec-summary { --sec: #00AC46; --sec-soft: #E6F7ED; --sec-ink: #008F3A; }
+.sec-goals   { --sec: #F5A01E; --sec-soft: #FEF4E4; --sec-ink: #B66F00; }
+.sec-agents  { --sec: #734BA5; --sec-soft: #F1ECF7; --sec-ink: #734BA5; }
+.sec-compare { --sec: #3782CD; --sec-soft: #EAF2FA; --sec-ink: #2F6FAF; }
+.sec-actions { --sec: #FAD400; --sec-soft: #FFF8CC; --sec-ink: #8A7500; }
+.section[class*=" sec-"] { border-top: 5px solid var(--sec); }
+.sec-title { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.sec-icon {
+  width: 46px; height: 46px; border-radius: 14px; flex-shrink: 0;
+  display: grid; place-items: center; background: var(--sec-soft); color: var(--sec-ink);
+}
+.sec-icon svg { width: 24px; height: 24px; }
 .section-head {
   display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap;
   margin-bottom: 20px;
@@ -456,6 +468,8 @@ dialog::backdrop { background: rgba(37, 37, 37, .45); }
   .container { padding: 16px 16px 48px; }
   .section, .period-bar { padding: 20px 16px; border-radius: 18px; }
   .section-head h2 { font-size: 20px; }
+  .sec-icon { width: 40px; height: 40px; border-radius: 12px; }
+  .sec-icon svg { width: 21px; height: 21px; }
   .section-head > .btn { width: 100%; }
   .period-btn { flex: 1 1 0; min-width: 0; }
   .period-tools .btn { flex: 1 1 0; }
