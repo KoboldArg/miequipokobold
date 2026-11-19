@@ -6,7 +6,7 @@ Herramienta interna para que cada Team Leader gestione su equipo por período: o
 
 Abrir `index.html` con doble clic (Chrome, Edge, Firefox o Safari). No necesita instalación ni servidor.
 
-- Los datos se guardan en **este navegador y este dispositivo** (LocalStorage). Si se borra el historial / datos de sitios, se pierden. Usar **Exportar CSV** para tener una copia.
+- Los datos se guardan en **este navegador y este dispositivo** (LocalStorage). Si se borra el historial / datos de sitios, se pierden. Usar **Imprimir resumen** (o guardarlo como PDF) para tener una copia.
 - Cada TL entra escribiendo su nombre. Escribiendo el mismo nombre vuelve a su espacio.
 - Cada período (P12 · 2026, P13 · 2026) guarda su información por separado.
 

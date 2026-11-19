@@ -354,7 +354,7 @@
         <div class="empty">
           <strong>Definí qué querés alcanzar con tu equipo en este período.</strong>
           <p>Podés sumar objetivos de ventas, reclutamiento, demos u otros.</p>
-          <div class="btn-row"><button class="btn btn-primary btn-lg" data-act="add-goal">+ Agregar objetivo</button></div>
+          <div class="btn-row"><button class="btn btn-primary" data-act="add-goal">+ Agregar objetivo</button></div>
         </div>`;
       return;
     }
@@ -563,8 +563,8 @@
           <strong>Todavía no agregaste agentes a tu equipo.</strong>
           <p>Comenzá agregando a tu primera agente.</p>
           <div class="btn-row">
-            <button class="btn btn-primary btn-lg" data-act="add-agent">+ Agregar agente</button>
-            ${other ? `<button class="btn btn-outline btn-lg" data-act="import-agents" data-from="${other.id}" hidden id="btn-import">Traer mis agentes de ${esc(other.label)}</button>` : ''}
+            <button class="btn btn-primary" data-act="add-agent">+ Agregar agente</button>
+            ${other ? `<button class="btn btn-outline" data-act="import-agents" data-from="${other.id}" hidden id="btn-import">Traer mis agentes de ${esc(other.label)}</button>` : ''}
           </div>
         </div>`;
       if (other) maybeShowImport(other.id);
@@ -752,7 +752,6 @@
       if (pa != null && pb != null && pa !== pb) return pb - pa;
       return byName(a, b);
     });
-    const { good, follow } = config.thresholds;
     $('#compare').innerHTML = `
       <div class="legend">
         <span><span class="dot" style="--dot:var(--green)"></span>Buen avance o meta alcanzada</span>
@@ -761,11 +760,6 @@
         <span><span class="dot" style="--dot:var(--red)"></span>Necesita intervención</span>
         <span><span class="dot" style="--dot:var(--gray)"></span>Sin objetivo o inactiva</span>
       </div>
-      <p class="legend-help">
-        Cómo se define el color: verde desde el ${good}% de su objetivo individual; amarillo entre ${follow}% y ${good - 1}%;
-        naranja por debajo del ${follow}% pero con demos o ventas cargadas; rojo por debajo del ${follow}% y todavía sin actividad registrada.
-        Es una guía para conversar con cada agente, no una evaluación.
-      </p>
       <div class="compare-row compare-head">
         <span>Agente</span><span class="compare-num">Objetivo</span><span class="compare-num">Demos</span><span class="compare-num">Ventas</span><span>Avance</span>
       </div>
@@ -830,12 +824,13 @@
 
   function renderActions() {
     const all = state.data.actions;
+    $('#btn-add-action-top').hidden = all.length === 0;
     if (!all.length) {
       $('#actions').innerHTML = `
         <div class="empty">
           <strong>Todavía no registraste acciones de seguimiento en ${esc(periodLabel())}.</strong>
           <p>Anotá qué vas a trabajar con cada agente esta semana: coordinar demos, acompañarla en una demo, conversar sobre su objetivo…</p>
-          <div class="btn-row"><button class="btn btn-primary btn-lg" data-act="add-action">+ Agregar acción</button></div>
+          <div class="btn-row"><button class="btn btn-primary" data-act="add-action">+ Agregar acción</button></div>
         </div>`;
       return;
     }
@@ -1142,75 +1137,6 @@
       : '<p class="section-sub">Todavía no hay acciones registradas para esta agente.</p>';
   }
 
-  /* ---------------- Exportar CSV ---------------- */
-  function csvCell(v) {
-    if (v == null) return '';
-    if (typeof v === 'number') return String(v);
-    let s = String(v);
-    if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; // evita fórmulas al abrir en Excel
-    return /[";\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-  }
-
-  function exportCSV() {
-    const { goals, agents, actions } = state.data;
-    const totals = calc.teamTotals(agents);
-    const rows = [];
-    const row = (...cells) => rows.push(cells.map(csvCell).join(';'));
-
-    row('Gestión comercial de mi equipo | Kobold');
-    row('Team Leader', state.tl.name);
-    row('Período', periodLabel());
-    row('Fecha de exportación', fmtDate(todayISO()));
-    row();
-    row('OBJETIVOS DEL EQUIPO');
-    row('Tipo', 'Descripción', 'Cantidad objetivo', 'Cantidad alcanzada', 'Pendiente', 'Avance %', 'Cálculo');
-    goals.forEach((g) => {
-      const t = config.goalTypes[g.type] || config.goalTypes.otro;
-      const ach = calc.goalAchieved(g, totals);
-      const pct = calc.percent(ach, g.target);
-      row(t.label, goalTitle(g), calc.hasTarget(g.target) ? n(g.target) : '', ach,
-        calc.hasTarget(g.target) ? calc.pending(ach, g.target) : '', pct == null ? '' : pct,
-        g.auto && t.auto ? 'Automático' : 'Manual');
-    });
-    if (!goals.length) row('Sin objetivos cargados');
-    row();
-    row('RESUMEN DEL EQUIPO');
-    row('Agentes', 'Activas', 'Ventas realizadas', 'Demos realizadas');
-    row(totals.count, totals.active, totals.sales, totals.demos);
-    row();
-    row('AGENTES');
-    row('Nombre y apellido', 'Estado', 'Objetivo de ventas', 'Demos planificadas', 'Demos realizadas', 'Ventas realizadas',
-      'Avance %', 'Faltan', 'Situación', 'Qué quiere conseguir', 'Qué necesita trabajar', 'Observaciones', 'Próxima acción', 'Fecha de seguimiento');
-    agents.forEach((a) => {
-      const pct = calc.percent(a.sales, a.target);
-      row(a.name, a.status === 'inactiva' ? 'Inactiva' : 'Activa',
-        calc.hasTarget(a.target) ? n(a.target) : '', a.demosPlanned == null ? '' : n(a.demosPlanned),
-        n(a.demosDone), n(a.sales), pct == null ? '' : pct,
-        calc.hasTarget(a.target) ? calc.pending(a.sales, a.target) : '',
-        calc.agentSituation(a).label, a.personalGoal, a.needs, a.notes, a.nextAction, fmtDate(a.followUpDate));
-    });
-    if (!agents.length) row('Sin agentes cargadas');
-    row();
-    row('SEGUIMIENTO SEMANAL');
-    row('Agente', 'Qué vamos a trabajar', 'Próxima acción', 'Fecha prevista', 'Estado');
-    sortActions(actions).forEach((x) => {
-      row(x.agentId ? agentName(x.agentId) : 'Todo el equipo', x.topic, x.nextAction, fmtDate(x.date), config.actionStatuses[x.status]);
-    });
-    if (!actions.length) row('Sin acciones cargadas');
-
-    const blob = new Blob(['﻿' + rows.join('\r\n')], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    const safe = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase();
-    link.href = url;
-    link.download = `kobold-mi-equipo-${safe(state.tl.name)}-${safe(state.periodId)}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-    toast('Archivo CSV descargado');
-  }
-
   /* ---------------- Imprimir resumen ---------------- */
   function printSummary() {
     const { goals, agents, actions } = state.data;
@@ -1294,7 +1220,6 @@
         case 'edit-tl': editTL(); break;
         case 'logout': logout(); break;
         case 'period': changePeriod(id); break;
-        case 'export-csv': exportCSV(); break;
         case 'print': printSummary(); break;
         case 'add-goal': goalForm(null, el.dataset.type); break;
         case 'edit-goal': goalForm(state.data.goals.find((g) => g.id === id)); break;

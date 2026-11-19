@@ -258,17 +258,21 @@ svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width:
 
 /* ---------- Estados vacíos ---------- */
 .empty {
-  text-align: center; padding: 36px 20px; border: 2px dashed var(--line); border-radius: var(--radius);
-  display: grid; gap: 8px; justify-items: center;
+  background: var(--bg); border-radius: var(--radius); padding: 22px 24px;
+  display: grid; grid-template-columns: 1fr auto; gap: 4px 24px; align-items: center;
 }
-.empty strong { font-size: 18px; }
-.empty p { color: var(--muted); max-width: 460px; }
-.empty .btn-row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-top: 8px; }
+.empty strong { font-size: 17px; grid-column: 1; }
+.empty p { color: var(--muted); grid-column: 1; }
+.empty .btn-row { grid-column: 2; grid-row: 1 / span 2; display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+@media (max-width: 640px) {
+  .empty { grid-template-columns: 1fr; padding: 18px 16px; }
+  .empty .btn-row { grid-column: 1; grid-row: auto; margin-top: 10px; }
+  .empty .btn-row .btn { width: 100%; }
+}
 
 /* ---------- Comparativa ---------- */
-.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-bottom: 8px; font-size: 14px; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-bottom: 18px; font-size: 14px; }
 .legend span { display: inline-flex; align-items: center; gap: 6px; }
-.legend-help { font-size: 13px; color: var(--muted); margin-bottom: 18px; }
 .compare-row {
   display: grid; grid-template-columns: minmax(150px, 1.3fr) 80px 80px 80px minmax(200px, 2.4fr);
   gap: 12px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--line);
