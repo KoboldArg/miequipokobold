@@ -31,7 +31,17 @@
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   };
+  /* Corrige años escritos con dos dígitos en el calendario (ej. "26" queda como 0026 → 2026). */
+  const fixDate = (iso) => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
+    if (!m) return '';
+    let y = Number(m[1]);
+    if (y < 100) y += 2000;
+    else if (y < 1900) return '';
+    return `${y}-${m[2]}-${m[3]}`;
+  };
   const fmtDate = (iso) => {
+    iso = fixDate(iso);
     if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return '';
     const [y, m, d] = iso.split('-');
     return `${d}/${m}/${y}`;
@@ -188,7 +198,7 @@
     state.data = {
       goals: d.goals.slice().sort(byCreated),
       agents: d.agents.map(normalizeAgent).sort(byName),
-      actions: d.actions.slice(),
+      actions: d.actions.map((x) => Object.assign({}, x, { date: fixDate(x.date) })),
     };
   }
 
@@ -199,7 +209,8 @@
     if (x.demosScheduled === undefined) x.demosScheduled = 0;
     if (x.demosScheduledWith == null) x.demosScheduledWith = '';
     x.gtk = !!x.gtk;
-    if (x.purchaseDate == null) x.purchaseDate = '';
+    x.purchaseDate = fixDate(x.purchaseDate);
+    x.followUpDate = fixDate(x.followUpDate);
     if (x.gtkSales == null) x.gtkSales = 0;
     delete x.demosPlanned;
     return x;
@@ -1067,12 +1078,12 @@
           demosScheduled: n(el.demosScheduled.value),
           demosScheduledWith: el.demosScheduledWith.value.trim(),
           gtk: el.gtk.checked,
-          purchaseDate: el.gtk.checked ? el.purchaseDate.value : '',
+          purchaseDate: el.gtk.checked ? fixDate(el.purchaseDate.value) : '',
           gtkSales: el.gtk.checked ? n(el.gtkSales.value) : 0,
           personalGoal: el.personalGoal.value.trim(),
           needs: el.needs.value.trim(),
           nextAction: el.nextAction.value.trim(),
-          followUpDate: el.followUpDate.value,
+          followUpDate: fixDate(el.followUpDate.value),
           notes: el.notes.value.trim(),
         };
         if (isNew && state.tab !== 'agentes') setTab('agentes');
@@ -1263,7 +1274,7 @@
           agentId: el.agentId.value,
           topic,
           nextAction: el.nextAction.value.trim(),
-          date: el.date.value,
+          date: fixDate(el.date.value),
           status: el.status.value,
         };
         return mutate(
@@ -1459,8 +1470,17 @@
     if (f === 'gtk') return el.checked;
     if (f === 'name') return el.value.trim().replace(/\s+/g, ' ');
     if (f === 'status') return el.value === 'inactiva' ? 'inactiva' : 'activa';
-    return el.type === 'date' ? el.value : el.value.trim();
+    return el.type === 'date' ? fixDate(el.value) : el.value.trim();
   }
+
+  /* Si en un calendario se escribe el año con dos dígitos, se corrige al salir del campo. */
+  document.addEventListener('change', (e) => {
+    const el = e.target;
+    if (el && el.type === 'date' && el.value) {
+      const fixed = fixDate(el.value);
+      if (fixed && fixed !== el.value) el.value = fixed;
+    }
+  }, true);
 
   function onFichaInput(e) {
     const el = e.target;

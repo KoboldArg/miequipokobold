@@ -70,7 +70,8 @@ KGC.calc = (function () {
   const DAY = 86400000;
   const toDay = (iso) => {
     if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return null;
-    const [y, m, d] = iso.split('-').map(Number);
+    let [y, m, d] = iso.split('-').map(Number);
+    if (y < 100) y += 2000;
     return Date.UTC(y, m - 1, d) / DAY;
   };
   const fromDay = (day) => new Date(day * DAY).toISOString().slice(0, 10);
