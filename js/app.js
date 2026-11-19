@@ -92,6 +92,7 @@
     $('#modal-title').textContent = title;
     $('#modal-body').innerHTML = body;
     $('#modal-submit').hidden = !submitLabel;
+    $('.modal-foot [data-close]').textContent = submitLabel ? 'Cancelar' : 'Cerrar';
     if (submitLabel) $('#modal-submit').textContent = submitLabel;
     form.onsubmit = async (e) => {
       e.preventDefault();
@@ -322,6 +323,7 @@
   function renderHeader() {
     $('#tl-name').textContent = state.tl.name;
     $('#tl-avatar').textContent = initials(state.tl.name);
+    $('#tl-avatar-sm').textContent = initials(state.tl.name);
     $('#hello').textContent = `¡Hola, ${state.tl.name.split(' ')[0]}!`;
     document.title = `Gestión comercial de mi equipo | Kobold`;
   }
@@ -348,6 +350,7 @@
   }
 
   async function logout() {
+    closeModal();
     KGC.tour.stop();
     await flushFicha();
     await store.clearSession();
@@ -378,10 +381,38 @@
       btn.classList.toggle('is-active', on);
       $(`#panel-${t}`).hidden = !on;
     });
+    updateBottomNav(state.tab);
+  }
+
+  /* Barra inferior del celular: también se ve dentro de la ficha (marca "Mis agentes"). */
+  function updateBottomNav(active) {
     const agents = state.data.agents.length;
     const open = state.data.actions.filter((x) => x.status !== 'realizado').length;
     $('#count-agentes').textContent = agents || '';
     $('#count-seguimiento').textContent = open || '';
+    $('#bcount-agentes').textContent = agents || '';
+    $('#bcount-seguimiento').textContent = open || '';
+    TABS.forEach((t) => {
+      const b = $(`#bnav-${t}`);
+      b.classList.toggle('is-active', t === active);
+      if (t === active) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+    });
+  }
+
+  function accountMenu() {
+    openModal({
+      title: 'Mi cuenta',
+      submitLabel: null,
+      body: `
+        <div class="account-box">
+          <span class="tl-avatar tl-avatar-lg" aria-hidden="true">${esc(initials(state.tl.name))}</span>
+          <div><small>Team Leader</small><strong>${esc(state.tl.name)}</strong></div>
+        </div>
+        <div class="account-actions">
+          <button type="button" class="btn btn-outline btn-block" data-act="edit-tl">${ICONS.edit} Editar mi nombre</button>
+          <button type="button" class="btn btn-ghost btn-block" data-act="logout">Salir</button>
+        </div>`,
+    });
   }
 
   function setTab(tab) {
@@ -1077,6 +1108,7 @@
     if (!a) { history.replaceState(null, '', '#/'); showDashboard(); return; }
     state.currentAgentId = id;
     state.returnTo = true;
+    updateBottomNav('agentes');
     $('#view-dashboard').hidden = true;
     const view = $('#view-agent');
     view.hidden = false;
@@ -1370,6 +1402,7 @@
       const { act, id } = el.dataset;
       switch (act) {
         case 'edit-tl': editTL(); break;
+        case 'account': accountMenu(); break;
         case 'logout': logout(); break;
         case 'period': changePeriod(id); break;
         case 'print': printSummary(); break;

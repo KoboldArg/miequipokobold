@@ -45,9 +45,7 @@ La hoja de estilos usa `Vorwerk` si está instalada en la computadora; si no, `N
 
 ## Paso a base de datos compartida (Supabase)
 
-Toda la app usa `KGC.store` (definido al final de `js/storage.js`) con funciones asíncronas: `findOrCreateTL`, `getPeriod`, `create`, `update`, `remove`, `removeWhere`, etc. Para conectar Supabase:
-
-1. Crear las tablas con `supabase/schema.sql` (incluye seguridad por TL y rol de administración).
-2. Escribir `KGC.createSupabaseStore(client)` respetando la misma interfaz: cada colección (`goals`, `agents`, `actions`) es una tabla filtrada por `tl_id` y `period_id`.
-3. Reemplazar el ingreso por nombre por el inicio de sesión de Supabase Auth.
-4. Cambiar `KGC.store = KGC.createLocalStore()` por el nuevo store.
+1. `supabase/schema.sql`: crea tablas, períodos y permisos (cada TL ve lo suyo; administración ve todo).
+2. En Authentication: desactivar el registro libre y la confirmación por mail; crear los usuarios.
+3. `supabase/usuarios.sql`: vincula cada usuario como TL o administración.
+4. En la app: reemplazar `KGC.store = KGC.createLocalStore()` por un store de Supabase con la misma interfaz y sumar la pantalla de ingreso con usuario y contraseña.

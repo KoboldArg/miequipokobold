@@ -14,7 +14,7 @@ KGC.tour = (function () {
       text: 'Tres pasos en orden: los objetivos del equipo, tus agentes y el objetivo de cada una. Esta guía desaparece cuando completás los tres.',
     },
     {
-      el: '#tabs', tab: 'resumen',
+      el: '#tabs, #bottom-nav', tab: 'resumen',
       title: 'Tres pestañas',
       text: 'Resumen: cómo viene tu equipo. Mis agentes: cada una con sus números. Seguimiento: lo que vas a hacer esta semana.',
     },
@@ -57,6 +57,11 @@ KGC.tour = (function () {
 
   /* Se saltea un paso si su parte no existe o está oculta a propósito (no por estar en otra pestaña). */
   const available = (el) => el && !el.hidden;
+  /* Con varios selectores, usa el primero que se ve (en celular la barra inferior reemplaza a las pestañas). */
+  const pick = (sel) => {
+    const all = Array.from(document.querySelectorAll(sel));
+    return all.find((e) => e.getClientRects().length > 0) || all[0] || null;
+  };
 
   function build() {
     const block = document.createElement('div');
@@ -89,7 +94,7 @@ KGC.tour = (function () {
 
   function position() {
     if (!nodes) return;
-    const target = document.querySelector(steps[index].el);
+    const target = pick(steps[index].el);
     if (!target) return;
     const r = target.getBoundingClientRect();
     const pad = 8;
@@ -105,6 +110,7 @@ KGC.tour = (function () {
 
     if (window.innerWidth <= 640) {
       card.classList.add('is-sheet');
+      card.classList.toggle('is-top', r.top > window.innerHeight * 0.55);
       card.style.top = card.style.left = '';
       return;
     }
@@ -130,7 +136,7 @@ KGC.tour = (function () {
     index = i;
     const step = steps[i];
     if (step.tab && KGC.app) KGC.app.setTab(step.tab);
-    const target = document.querySelector(step.el);
+    const target = pick(step.el);
     const header = document.querySelector('.topbar');
     const offset = (header ? header.offsetHeight : 0) + 16;
     const r = target.getBoundingClientRect();
@@ -156,7 +162,7 @@ KGC.tour = (function () {
 
   function start() {
     if (nodes) stop();
-    steps = STEPS.filter((s) => available(document.querySelector(s.el)));
+    steps = STEPS.filter((s) => available(pick(s.el)));
     if (!steps.length) return;
     nodes = build();
     document.body.classList.add('tour-open');
