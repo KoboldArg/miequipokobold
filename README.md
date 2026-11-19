@@ -25,12 +25,13 @@ Abrir `index.html` con doble clic (Chrome, Edge, Firefox o Safari). No necesita 
 
 ## Datos de cada agente
 
-Por período: si es nueva (cuenta para el objetivo de agentes nuevas), objetivo de ventas, ventas hechas, objetivo de demos, demos hechas y demos agendadas (con fecha, todavía no hechas), más el seguimiento.
+Por período: estado (activa / inactiva), objetivo de ventas, objetivo de demos, ventas hechas, demos hechas, demos agendadas (con fecha, todavía no hechas) y seguimiento (qué quiere conseguir, qué necesita trabajar, próxima acción, fecha, observaciones).
 
 ## Objetivos del equipo
 
-- **Ventas, Demos y Agentes nuevas**: uno de cada uno por período. La TL solo define el número; el avance se calcula solo con los datos de las agentes.
-- **Otros objetivos**: se escriben a mano y el avance se suma con + y −.
+Tipos: Ventas, Demos, Reclutamiento (uno de cada uno por período) y Otro (los que se quiera).
+- Ventas y Demos se suman solos con lo que se carga en cada agente.
+- Reclutamiento y Otro se suman a mano con + y − en la tarjeta del objetivo.
 
 Al cambiar archivos CSS/JS, subir el número `?v=` en `index.html` para que los navegadores carguen la versión nueva.
 

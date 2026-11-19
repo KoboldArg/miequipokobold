@@ -91,13 +91,15 @@
     const form = $('#modal-form');
     $('#modal-title').textContent = title;
     $('#modal-body').innerHTML = body;
-    $('#modal-submit').textContent = submitLabel;
+    $('#modal-submit').hidden = !submitLabel;
+    if (submitLabel) $('#modal-submit').textContent = submitLabel;
     form.onsubmit = async (e) => {
       e.preventDefault();
+      if (!onSubmit) return;
       const ok = await onSubmit(form);
       if (ok !== false && dlg.open) dlg.close();
     };
-    dlg.showModal();
+    if (!dlg.open) dlg.showModal();
     $('#modal-body').scrollTop = 0;
     if (onOpen) onOpen(form);
     const first = form.querySelector('[autofocus]') || form.querySelector('#modal-body input:not([type=radio]):not([type=checkbox]), #modal-body textarea');
@@ -175,9 +177,9 @@
   }
 
   /* Barra de avance: hechas (color lleno) + agendadas (mismo color, más claro). */
-  function metric({ label, done, target, scheduled = null, unit, compact = false }) {
+  function metric({ label, done, target, scheduled = null, unit, compact = false, color: fixed }) {
     const pct = calc.percent(done, target);
-    const color = calc.levelColor(pct);
+    const color = fixed || calc.levelColor(pct);
     const has = calc.hasTarget(target);
     const left = calc.pending(done, target);
     const doneW = calc.barWidth(pct);
@@ -361,8 +363,8 @@
   function renderDashboard() {
     renderPeriod();
     renderTabs();
-    renderTeamGoals();
-    renderOtherGoals();
+    renderStart();
+    renderGoals();
     renderCompare();
     renderAgents();
     renderActions();
@@ -411,162 +413,199 @@
   }
 
   /* ----- Objetivos del equipo ----- */
-  const MAIN_INFO = {
+  const GOAL_INFO = {
     ventas: {
-      title: 'Ventas', unit: 'ventas', unit1: 'venta', icon: 'bag', color: '#00AC46', soft: '#E6F7ED', ink: '#008F3A',
+      label: 'Ventas', hint: 'Ventas del equipo', defaultTitle: 'Ventas del equipo', unit: 'ventas',
+      icon: 'bag', color: '#00AC46', soft: '#E6F7ED', ink: '#008F3A',
       question: '¿Cuántas ventas querés lograr con tu equipo?',
-      help: 'Las ventas hechas se suman solas con lo que cargás en cada agente.',
+      how: 'El avance se suma solo con las ventas que cargás en cada agente.',
     },
     demos: {
-      title: 'Demos', unit: 'demos', unit1: 'demo', icon: 'demo', color: '#3782CD', soft: '#EAF2FA', ink: '#2F6FAF',
+      label: 'Demos', hint: 'Demos del equipo', defaultTitle: 'Demos del equipo', unit: 'demos',
+      icon: 'demo', color: '#3782CD', soft: '#EAF2FA', ink: '#2F6FAF',
       question: '¿Cuántas demos querés que haga tu equipo?',
-      help: 'Las demos hechas y agendadas se suman solas con lo que cargás en cada agente.',
+      how: 'El avance se suma solo con las demos que cargás en cada agente.',
     },
     reclutamiento: {
-      title: 'Agentes nuevas', unit: 'agentes nuevas', unit1: 'agente nueva', icon: 'userPlus', color: '#734BA5', soft: '#F1ECF7', ink: '#734BA5',
-      question: '¿Cuántas agentes nuevas querés sumar al equipo?',
-      help: 'Se cuentan solas las agentes que agregues marcadas como «nueva».',
+      label: 'Reclutamiento', hint: 'Sumar agentes nuevas', defaultTitle: 'Incorporar agentes nuevas', unit: 'agentes',
+      icon: 'userPlus', color: '#734BA5', soft: '#F1ECF7', ink: '#734BA5',
+      question: '¿Cuántas agentes nuevas querés incorporar?',
+      how: 'Cada vez que se sume una agente nueva, tocá el botón + en la tarjeta del objetivo.',
+    },
+    otro: {
+      label: 'Otro', hint: 'Lo que vos quieras', defaultTitle: 'Otro objetivo', unit: '',
+      icon: 'flag', color: '#F5A01E', soft: '#FEF4E4', ink: '#B66F00',
+      question: '¿Cuántas veces o cuántas personas?',
+      how: 'Vas sumando lo logrado con los botones + y − en la tarjeta del objetivo.',
     },
   };
+  const GOAL_ORDER = { ventas: 0, demos: 1, reclutamiento: 2, otro: 3 };
+  const goalInfo = (type) => GOAL_INFO[type] || GOAL_INFO.otro;
+  const goalVars = (i) => `--c:${i.color};--c-soft:${i.soft};--c-ink:${i.ink}`;
 
-  function renderTeamGoals() {
+  function goalTitle(g) {
+    return g.description && g.description.trim() ? g.description : goalInfo(g.type).defaultTitle;
+  }
+
+  function goalTypeButtons() {
+    return `<div class="goal-type-grid">${Object.entries(GOAL_INFO).map(([type, i]) => `
+      <button type="button" class="goal-type" style="${goalVars(i)}" data-act="add-goal" data-type="${type}">
+        <span class="goal-type-icon" aria-hidden="true">${ICONS[i.icon]}</span>
+        <span class="goal-type-label">${i.label}</span>
+        <span class="goal-type-hint">${i.hint}</span>
+      </button>`).join('')}</div>`;
+  }
+
+  function renderGoals() {
     const { goals, agents } = state.data;
     const t = calc.teamTotals(agents);
-    const main = calc.mainGoals(goals);
     $('#team-size').textContent = t.count
       ? `${periodLabel()} · ${t.count} ${t.count === 1 ? 'agente' : 'agentes'} en el equipo (${t.active} ${t.active === 1 ? 'activa' : 'activas'})`
       : `${periodLabel()} · todavía sin agentes cargadas`;
-    $('#team-goals').innerHTML = calc.MAIN_TYPES.map((type) => teamGoalCard(type, main[type], t, agents)).join('');
+    $('#btn-add-goal-top').hidden = goals.length === 0;
+
+    if (!goals.length) {
+      $('#goals').innerHTML = `
+        <div class="goal-starter">
+          <p class="goal-starter-title">¿Qué objetivo querés cargar para ${esc(periodLabel())}? Elegí uno para empezar:</p>
+          ${goalTypeButtons()}
+        </div>`;
+      return;
+    }
+    const list = goals.slice().sort((a, b) => (GOAL_ORDER[a.type] ?? 3) - (GOAL_ORDER[b.type] ?? 3) || byCreated(a, b));
+    $('#goals').innerHTML = `<div class="goals-grid">${list.map((g) => goalCard(g, t)).join('')}</div>`;
   }
 
-  function teamGoalCard(type, goal, t, agents) {
-    const info = MAIN_INFO[type];
-    const done = calc.mainAchieved(type, t);
-    const target = goal ? goal.target : null;
-    const has = calc.hasTarget(target);
-    const pct = calc.percent(done, target);
-    const left = calc.pending(done, target);
-    const scheduled = type === 'demos' ? t.demosScheduled : 0;
+  function goalCard(g, t) {
+    const i = goalInfo(g.type);
+    const auto = calc.isAuto(g.type);
+    const done = calc.goalAchieved(g, t);
+    const has = calc.hasTarget(g.target);
+    const pct = calc.percent(done, g.target);
+    const left = calc.pending(done, g.target);
+    const scheduled = g.type === 'demos' ? t.demosScheduled : 0;
     const doneW = calc.barWidth(pct);
-    const schedW = has && scheduled ? Math.min(100 - doneW, Math.round((scheduled / n(target)) * 100)) : 0;
+    const schedW = has && scheduled ? Math.min(100 - doneW, Math.round((scheduled / n(g.target)) * 100)) : 0;
 
     let note = '';
-    if (type === 'ventas' || type === 'demos') {
-      const sum = type === 'ventas' ? t.salesTargets : t.demosTargets;
-      if (has && t.active) {
-        const diff = n(target) - sum;
-        if (!sum) note = `Todavía no le pusiste objetivo de ${info.unit} a tus agentes.`;
-        else if (diff > 0) note = `Repartiste <b>${sum}</b> entre tus agentes. Te faltan repartir <b>${diff}</b>.`;
-        else if (diff < 0) note = `Repartiste <b>${sum}</b> entre tus agentes: <b>${-diff}</b> más que el objetivo del equipo.`;
-        else note = `Repartiste <b>${sum}</b> entre tus agentes ✓`;
-      }
-    } else {
-      const nuevas = agents.filter((a) => a.isNew).map((a) => esc(a.name.split(' ')[0]));
-      note = nuevas.length
-        ? `Nuevas: ${nuevas.join(', ')}`
-        : 'Cuando agregues una agente, marcala como «nueva» y se suma acá.';
+    if (auto && has && t.active) {
+      const sum = g.type === 'ventas' ? t.salesTargets : t.demosTargets;
+      const diff = n(g.target) - sum;
+      if (!sum) note = `Todavía no le pusiste objetivo de ${i.unit} a tus agentes.`;
+      else if (diff > 0) note = `Repartiste <b>${sum}</b> entre tus agentes. Te faltan repartir <b>${diff}</b>.`;
+      else if (diff < 0) note = `Repartiste <b>${sum}</b> entre tus agentes: <b>${-diff}</b> más que el objetivo.`;
+      else note = `Repartiste <b>${sum}</b> entre tus agentes ✓`;
+    } else if (auto) {
+      note = i.how;
     }
 
+    const counter = auto ? '' : `
+      <div class="mini-stepper" role="group" aria-label="Sumar o restar lo logrado">
+        <button type="button" data-act="goal-step" data-id="${g.id}" data-delta="-1" aria-label="Restar uno" ${done === 0 ? 'disabled' : ''}>−</button>
+        <button type="button" data-act="goal-step" data-id="${g.id}" data-delta="1" aria-label="Sumar uno">+</button>
+      </div>`;
+
     return `
-      <article class="tgoal" style="--c:${info.color};--c-soft:${info.soft};--c-ink:${info.ink}">
+      <article class="tgoal" style="${goalVars(i)}">
         <div class="tgoal-head">
-          <span class="tgoal-icon" aria-hidden="true">${ICONS[info.icon]}</span>
-          <h3>${info.title}</h3>
-          ${has ? `<button class="btn btn-ghost btn-sm tgoal-edit" data-act="main-goal" data-type="${type}" aria-label="Cambiar el objetivo de ${info.title.toLowerCase()}">${ICONS.edit} Cambiar</button>` : ''}
+          <span class="tgoal-icon" aria-hidden="true">${ICONS[i.icon]}</span>
+          <div class="tgoal-titles">
+            <span class="tgoal-type">${i.label}</span>
+            <h3>${esc(goalTitle(g))}</h3>
+          </div>
+          <div class="goal-actions">
+            <button class="icon-btn" data-act="edit-goal" data-id="${g.id}" aria-label="Editar objetivo" title="Editar">${ICONS.edit}</button>
+            <button class="icon-btn" data-act="delete-goal" data-id="${g.id}" aria-label="Eliminar objetivo" title="Eliminar">${ICONS.trash}</button>
+          </div>
+        </div>
+        <div class="tgoal-row">
+          <p class="tgoal-num"><b>${done}</b>${has ? ` de ${n(g.target)}` : ` ${auto ? i.unit : 'logrado'}`}</p>
+          ${counter}
         </div>
         ${has ? `
-          <p class="tgoal-num"><b>${done}</b> de ${n(target)}</p>
-          <div class="bar bar-lg bar-split" role="img" aria-label="${done} de ${n(target)} ${info.unit}${scheduled ? `, ${scheduled} agendadas` : ''}">
-            <span style="width:${doneW}%;background:${info.color}"></span>${schedW ? `<span class="sched" style="width:${schedW}%;background:${info.color}"></span>` : ''}
+          <div class="bar bar-lg bar-split" role="img" aria-label="${done} de ${n(g.target)}${scheduled ? `, ${scheduled} agendadas` : ''}">
+            <span style="width:${doneW}%;background:${i.color}"></span>${schedW ? `<span class="sched" style="width:${schedW}%;background:${i.color}"></span>` : ''}
           </div>
           <div class="tgoal-foot">
-            <span><b>${pct}%</b></span>
+            <span><b>${pct}%</b> de avance</span>
             ${left > 0 ? `<span>Faltan <b>${left}</b></span>` : '<span class="tgoal-done">¡Cumplido!</span>'}
           </div>
-          ${scheduled ? `<p class="tgoal-sched"><i></i>${scheduled} ${scheduled === 1 ? 'demo agendada' : 'demos agendadas'}</p>` : ''}`
-        : `
-          <p class="tgoal-num"><b>${done}</b> ${done === 1 ? info.unit1 : info.unit}</p>
-          <button class="btn btn-primary btn-sm" data-act="main-goal" data-type="${type}">Definir objetivo</button>`}
+          ${scheduled ? `<p class="tgoal-sched"><i></i>${scheduled} ${scheduled === 1 ? 'demo agendada' : 'demos agendadas'} (todavía no hechas)</p>` : ''}`
+        : `<button class="btn btn-primary btn-sm tgoal-cta" data-act="edit-goal" data-id="${g.id}">Poner cantidad objetivo</button>`}
         ${note ? `<p class="tgoal-note">${note}</p>` : ''}
       </article>`;
   }
 
-  function mainGoalForm(type) {
-    const info = MAIN_INFO[type];
-    const goal = calc.mainGoals(state.data.goals)[type];
-    openModal({
-      title: `Objetivo de ${info.title.toLowerCase()} del equipo`,
-      submitLabel: 'Guardar',
-      body: `
-        <div class="form-grid">
-          ${stepperField('target', `${info.question} <span class="opt">${esc(periodLabel())}</span>`, goal ? goal.target : null, { placeholder: 'Sin definir', help: info.help })}
-        </div>`,
-      onSubmit: async (form) => {
-        const target = intOrNull(form.elements.target.value);
-        return mutate(async () => {
-          if (goal) await update('goals', goal.id, { target });
-          else await create('goals', { type, description: '', target, achieved: 0 });
-        }, target ? 'Objetivo guardado' : 'Objetivo sin definir');
-      },
-    });
-  }
-
-  /* ----- Otros objetivos (se cargan a mano) ----- */
-  function goalTitle(g) {
-    const t = config.goalTypes[g.type] || config.goalTypes.otro;
-    return g.description && g.description.trim() ? g.description : `Objetivo de ${t.label.toLowerCase()}`;
-  }
-
-  function renderOtherGoals() {
-    const others = calc.otherGoals(state.data.goals);
-    $('#other-goals').innerHTML = `
-      <div class="other-goals">
-        <div class="other-head">
-          <h3>Otros objetivos</h3>
-          <button class="btn btn-ghost btn-sm" data-act="add-goal">+ Agregar otro objetivo</button>
-        </div>
-        ${others.length ? `<ul class="other-list">${others.map((g) => {
-          const has = calc.hasTarget(g.target);
-          const pct = calc.percent(g.achieved, g.target);
-          return `
-            <li class="other-row">
-              <div class="other-main">
-                <span class="other-title">${esc(goalTitle(g))}</span>
-                ${has ? `<div class="bar"><span style="width:${calc.barWidth(pct)}%;background:var(--orange)"></span></div>` : ''}
-              </div>
-              <div class="mini-stepper" role="group" aria-label="Cantidad lograda">
-                <button type="button" data-act="goal-step" data-id="${g.id}" data-delta="-1" aria-label="Restar uno" ${n(g.achieved) === 0 ? 'disabled' : ''}>−</button>
-                <span><b>${n(g.achieved)}</b>${has ? ` de ${n(g.target)}` : ''}</span>
-                <button type="button" data-act="goal-step" data-id="${g.id}" data-delta="1" aria-label="Sumar uno">+</button>
-              </div>
-              <div class="other-btns">
-                <button class="icon-btn" data-act="edit-goal" data-id="${g.id}" aria-label="Editar objetivo" title="Editar">${ICONS.edit}</button>
-                <button class="icon-btn" data-act="delete-goal" data-id="${g.id}" aria-label="Eliminar objetivo" title="Eliminar">${ICONS.trash}</button>
-              </div>
-            </li>`;
-        }).join('')}</ul>` : '<p class="other-empty">Por ejemplo: activar a 2 agentes inactivas, o capacitar al equipo en un producto.</p>'}
-      </div>`;
-  }
-
-  function goalForm(goal) {
+  /* Agregar o editar un objetivo. Sin tipo: primero se elige el tipo. */
+  function goalForm(goal, presetType) {
     const isNew = !goal;
-    const g = goal || { type: 'otro', description: '', target: null, achieved: 0 };
+    if (isNew && !presetType) {
+      openModal({
+        title: '¿Qué objetivo querés agregar?',
+        body: goalTypeButtons(),
+        submitLabel: null,
+      });
+      return;
+    }
+    const existing = isNew && calc.UNIQUE_TYPES.includes(presetType) ? calc.findGoal(state.data.goals, presetType) : null;
+    if (existing) {
+      toast(`Ya tenés un objetivo de ${goalInfo(presetType).label.toLowerCase()}: podés cambiarlo acá`);
+      goalForm(existing);
+      return;
+    }
+    const g = goal || { type: presetType, description: '', target: null, achieved: 0 };
+    const typeOptions = Object.entries(GOAL_INFO).map(([value, i]) => ({ value, label: i.label, color: i.color }));
+
     openModal({
-      title: isNew ? 'Otro objetivo del equipo' : 'Editar objetivo',
+      title: isNew ? 'Nuevo objetivo del equipo' : 'Editar objetivo',
       submitLabel: isNew ? 'Agregar objetivo' : 'Guardar cambios',
       body: `
         <div class="form-grid">
-          ${textField('description', '¿Qué querés lograr?', g.description, { placeholder: 'Ej.: activar a 2 agentes inactivas', autofocus: true })}
-          ${stepperField('target', '¿Cuántas?', g.target, { placeholder: 'Sin definir', help: 'Después vas sumando lo logrado con los botones + y − en el resumen.' })}
+          <div class="field">
+            <span class="field-label">Tipo de objetivo</span>
+            ${choiceGroup('type', typeOptions, g.type)}
+          </div>
+          <div class="field">
+            <label for="f-description" id="lbl-description"></label>
+            <input id="f-description" name="description" type="text" maxlength="200" value="${esc(g.description || '')}">
+          </div>
+          ${stepperField('target', '<span id="lbl-target"></span>', g.target, { placeholder: 'Sin definir' })}
+          <div id="achieved-wrap">${stepperField('achieved', 'Lo logrado hasta hoy', n(g.achieved))}</div>
+          <p class="how-box" id="how-box"></p>
         </div>`,
+      onOpen: (form) => {
+        const el = form.elements;
+        const sync = () => {
+          const type = el.type.value;
+          const i = goalInfo(type);
+          const auto = calc.isAuto(type);
+          $('#lbl-description', form).innerHTML = type === 'otro'
+            ? '¿Qué querés lograr?'
+            : 'Nombre del objetivo <span class="opt">(opcional)</span>';
+          el.description.placeholder = type === 'otro' ? 'Ej.: activar a 2 agentes inactivas' : i.defaultTitle;
+          $('#lbl-target', form).textContent = `${i.question} (${periodLabel()})`;
+          $('#achieved-wrap', form).hidden = auto || isNew;
+          $('#how-box', form).textContent = i.how;
+        };
+        form.onchange = (e) => { if (e.target.name === 'type') sync(); };
+        sync();
+      },
       onSubmit: async (form) => {
         const el = form.elements;
+        const type = el.type.value;
         const description = el.description.value.trim();
-        if (!description) { showFieldError(el.description, 'Escribí qué querés lograr.'); return false; }
-        const data = { description, target: intOrNull(el.target.value) };
-        if (isNew) Object.assign(data, { type: 'otro', achieved: 0 });
+        if (type === 'otro' && !description) { showFieldError(el.description, 'Escribí qué querés lograr.'); return false; }
+        if (calc.UNIQUE_TYPES.includes(type)) {
+          const other = calc.findGoal(state.data.goals, type);
+          if (other && (!goal || other.id !== goal.id)) {
+            showFieldError(el.description, `Ya tenés un objetivo de ${goalInfo(type).label.toLowerCase()} en este período. Editá ese.`);
+            return false;
+          }
+        }
+        const data = { type, description, target: intOrNull(el.target.value) };
+        if (!calc.isAuto(type)) data.achieved = isNew ? 0 : n(el.achieved.value);
         return mutate(
-          () => (isNew ? create('goals', data) : update('goals', goal.id, data)),
+          () => (isNew ? create('goals', Object.assign({ achieved: 0 }, data)) : update('goals', goal.id, data)),
           isNew ? 'Objetivo agregado' : 'Objetivo actualizado'
         );
       },
@@ -586,6 +625,37 @@
     if (!g) return;
     const ok = await confirmDialog({ title: '¿Eliminar este objetivo?', message: `Vas a eliminar "${goalTitle(g)}" de ${periodLabel()}. Esta acción no se puede deshacer.` });
     if (ok) mutate(() => remove('goals', id), 'Objetivo eliminado');
+  }
+
+  /* ----- Cómo empezar: los 3 pasos principales ----- */
+  function renderStart() {
+    const { goals, agents } = state.data;
+    const active = agents.filter((a) => a.status !== 'inactiva');
+    const missing = active.filter((a) => !calc.hasTarget(a.target) && !calc.hasTarget(a.demosTarget));
+    const steps = [
+      { done: goals.length > 0, title: 'Definí los objetivos de tu equipo', detail: 'Ventas, demos, reclutamiento u otro.', btn: '+ Agregar objetivo', act: 'data-act="add-goal"' },
+      { done: agents.length > 0, title: 'Agregá a tus agentes', detail: 'Con su estado, lo que lleva hecho y su seguimiento.', btn: '+ Agregar agente', act: 'data-act="add-agent"' },
+      {
+        done: agents.length > 0 && missing.length === 0,
+        title: 'Poné un objetivo a cada agente',
+        detail: missing.length && agents.length ? `Faltan: ${missing.slice(0, 4).map((a) => esc(a.name.split(' ')[0])).join(', ')}${missing.length > 4 ? '…' : ''}` : 'De ventas y de demos, para el período.',
+        btn: 'Ir a mis agentes', act: 'data-act="tab" data-tab="agentes"',
+      },
+    ];
+    const box = $('#getting-started');
+    if (steps.every((s) => s.done)) { box.hidden = true; box.innerHTML = ''; return; }
+    box.hidden = false;
+    const next = steps.findIndex((s) => !s.done);
+    box.innerHTML = `
+      <h2>Cómo empezar en ${esc(periodLabel())}</h2>
+      <ol class="start-steps">
+        ${steps.map((s, i) => `
+          <li class="start-step ${s.done ? 'is-done' : ''} ${i === next ? 'is-next' : ''}">
+            <span class="start-num" aria-hidden="true">${s.done ? ICONS.check : i + 1}</span>
+            <div class="start-text"><b>${s.title}</b><span>${s.done ? 'Listo' : s.detail}</span></div>
+            ${!s.done && i === next ? `<button class="btn btn-primary btn-sm" ${s.act}>${s.btn}</button>` : ''}
+          </li>`).join('')}
+      </ol>`;
   }
 
   /* ----- Mis agentes ----- */
@@ -671,12 +741,15 @@
 
   function emptyAgent(extra) {
     return Object.assign({
-      name: '', status: 'activa', isNew: false, personalGoal: '',
+      name: '', status: 'activa', personalGoal: '',
       target: null, sales: 0,
       demosTarget: null, demosDone: 0, demosScheduled: 0,
       notes: '', needs: '', nextAction: '', followUpDate: '',
     }, extra);
   }
+
+  const SALES_COLOR = '#00AC46';
+  const DEMOS_COLOR = '#3782CD';
 
   function agentCard(a) {
     const sit = calc.agentSituation(a);
@@ -689,15 +762,14 @@
             <h3>${esc(a.name)}</h3>
             <div class="meta">
               ${inactive ? '<span class="pill pill-inactive">Inactiva</span>' : `<span class="pill"><span class="dot" style="--dot:${sit.color}"></span>${sit.label}</span>`}
-              ${a.isNew ? '<span class="pill pill-new">Nueva</span>' : ''}
             </div>
           </div>
         </div>
-        ${metric({ label: 'Ventas', done: a.sales, target: a.target, unit: 'ventas' })}
-        ${metric({ label: 'Demos', done: a.demosDone, target: a.demosTarget, scheduled: a.demosScheduled, unit: 'demos' })}
+        ${metric({ label: 'Ventas', done: a.sales, target: a.target, unit: 'ventas', color: SALES_COLOR })}
+        ${metric({ label: 'Demos', done: a.demosDone, target: a.demosTarget, scheduled: a.demosScheduled, unit: 'demos', color: DEMOS_COLOR })}
         ${a.nextAction ? `<div class="next-action"><b>Próxima acción</b>${esc(a.nextAction)}${a.followUpDate ? ` · ${fmtDate(a.followUpDate)}` : ''}</div>` : ''}
         <div class="agent-foot">
-          <button class="btn btn-primary btn-sm" data-act="progress" data-id="${a.id}">Cargar avance</button>
+          <button class="btn btn-primary btn-sm" data-act="edit-agent" data-id="${a.id}">${ICONS.edit} Actualizar datos</button>
           <button class="btn btn-outline btn-sm" data-act="view-agent" data-id="${a.id}">Ver ficha</button>
         </div>
       </article>`;
@@ -705,64 +777,55 @@
 
   const sameName = (name, exceptId) => state.data.agents.some((a) => a.id !== exceptId && fold(a.name) === fold(name));
 
-  /* Alta de una agente: solo lo necesario. El resto se completa después. */
-  function agentForm() {
+  /* Formulario completo de la agente: sirve para agregarla y para actualizarla. */
+  function agentForm(agent) {
+    const isNew = !agent;
+    const a = agent || emptyAgent();
+    const P = esc(periodLabel());
     openModal({
-      title: 'Nueva agente',
-      submitLabel: 'Agregar agente',
+      title: isNew ? 'Nueva agente' : `Actualizar a ${a.name}`,
+      submitLabel: isNew ? 'Agregar agente' : 'Guardar cambios',
       body: `
         <div class="form-grid">
-          ${textField('name', 'Nombre y apellido', '', { placeholder: 'Ej.: María Pérez', autofocus: true })}
-          <label class="toggle toggle-new">
-            <input type="checkbox" name="isNew">
-            <span><b>Es nueva:</b> se sumó al equipo en ${esc(periodLabel())}. Cuenta para el objetivo de agentes nuevas.</span>
-          </label>
-          <div class="form-block form-block-goals">
-            <p class="form-block-title">${ICONS.flag} Sus objetivos para ${esc(periodLabel())}</p>
-            <div class="form-row-2">
-              ${stepperField('target', 'Ventas', null, { placeholder: 'Sin definir' })}
-              ${stepperField('demosTarget', 'Demos', null, { placeholder: 'Sin definir' })}
+          <section class="form-step">
+            <p class="form-step-title"><span class="form-step-num">1</span>Sus datos</p>
+            ${textField('name', 'Nombre y apellido', a.name, { placeholder: 'Ej.: María Pérez', autofocus: isNew })}
+            <div class="field">
+              <span class="field-label">Estado</span>
+              ${choiceGroup('status', [{ value: 'activa', label: 'Activa' }, { value: 'inactiva', label: 'Inactiva', color: '#707070' }], a.status)}
             </div>
-            <p class="field-help">Podés dejarlos vacíos y completarlos después en su ficha.</p>
-          </div>
-        </div>`,
-      onSubmit: async (form) => {
-        const el = form.elements;
-        const name = el.name.value.trim().replace(/\s+/g, ' ');
-        if (!name) { showFieldError(el.name, 'Escribí el nombre de la agente.'); return false; }
-        if (sameName(name)) { showFieldError(el.name, `Ya tenés una agente llamada ${name} en este período.`); return false; }
-        const data = emptyAgent({
-          name,
-          isNew: el.isNew.checked,
-          target: intOrNull(el.target.value),
-          demosTarget: intOrNull(el.demosTarget.value),
-        });
-        return mutate(() => create('agents', data), `${name} se sumó a tu equipo`);
-      },
-    });
-  }
+          </section>
 
-  /* "Cargar avance": lo que se actualiza cada semana, en una sola ventana. */
-  function progressForm(a) {
-    if (!a) return;
-    openModal({
-      title: `Avance de ${a.name}`,
-      submitLabel: 'Guardar avance',
-      body: `
-        <div class="form-grid">
-          <div class="form-block form-block-sales">
-            <p class="form-block-title">${ICONS.bag} Ventas</p>
-            ${stepperField('sales', 'Ventas hechas', n(a.sales), { help: calc.hasTarget(a.target) ? `Su objetivo: ${n(a.target)}` : 'Sin objetivo definido' })}
-          </div>
-          <div class="form-block form-block-demos">
-            <p class="form-block-title">${ICONS.demo} Demos</p>
+          <section class="form-step">
+            <p class="form-step-title"><span class="form-step-num">2</span>Su objetivo para ${P}</p>
+            <p class="field-help">Lo que vos le proponés para el período. Si todavía no lo sabés, dejalo vacío.</p>
             <div class="form-row-2">
-              ${stepperField('demosDone', 'Demos hechas', n(a.demosDone), { help: calc.hasTarget(a.demosTarget) ? `Su objetivo: ${n(a.demosTarget)}` : 'Sin objetivo definido' })}
-              ${stepperField('demosScheduled', 'Demos agendadas', n(a.demosScheduled), { help: 'Con fecha, todavía no hechas' })}
+              ${stepperField('target', 'Objetivo de ventas', a.target, { placeholder: 'Sin definir' })}
+              ${stepperField('demosTarget', 'Objetivo de demos', a.demosTarget, { placeholder: 'Sin definir' })}
             </div>
-            <button type="button" class="btn btn-soft btn-sm btn-convert" id="btn-convert">✓ Se hizo una demo agendada</button>
-          </div>
-          ${textField('nextAction', 'Próxima acción', a.nextAction, { optional: true, placeholder: 'Ej.: acompañarla en su próxima demo' })}
+          </section>
+
+          <section class="form-step">
+            <p class="form-step-title"><span class="form-step-num">3</span>Lo que lleva hecho en ${P}</p>
+            <p class="field-help">Si recién la agregás, dejá todo en 0 y lo vas actualizando. Las <b>demos agendadas</b> tienen fecha pero todavía no se hicieron.</p>
+            <div class="form-row-2">
+              ${stepperField('sales', 'Ventas hechas', n(a.sales))}
+              ${stepperField('demosDone', 'Demos hechas', n(a.demosDone))}
+              ${stepperField('demosScheduled', 'Demos agendadas', n(a.demosScheduled))}
+              <div class="convert-cell"><button type="button" class="btn btn-soft btn-sm btn-convert" id="btn-convert">✓ Se hizo una demo agendada</button></div>
+            </div>
+          </section>
+
+          <section class="form-step">
+            <p class="form-step-title"><span class="form-step-num">4</span>Seguimiento <span class="opt">(opcional)</span></p>
+            ${textField('personalGoal', '¿Qué quiere conseguir? (incentivo, meta personal)', a.personalGoal, { multiline: true, placeholder: 'Ej.: llegar a 4 ventas para el incentivo del período' })}
+            ${textField('needs', '¿Qué necesita trabajar?', a.needs, { multiline: true, placeholder: 'Dificultades o aspectos a acompañar' })}
+            <div class="form-row-2">
+              ${textField('nextAction', 'Próxima acción', a.nextAction, { placeholder: 'Ej.: acompañarla en una demo' })}
+              ${textField('followUpDate', 'Fecha de seguimiento', a.followUpDate, { type: 'date' })}
+            </div>
+            ${textField('notes', 'Observaciones', a.notes, { multiline: true })}
+          </section>
         </div>`,
       onOpen: (form) => {
         const el = form.elements;
@@ -778,13 +841,28 @@
       },
       onSubmit: async (form) => {
         const el = form.elements;
+        const name = el.name.value.trim().replace(/\s+/g, ' ');
+        if (!name) { showFieldError(el.name, 'Escribí el nombre de la agente.'); return false; }
+        if (sameName(name, agent && agent.id)) { showFieldError(el.name, `Ya tenés una agente llamada ${name} en este período.`); return false; }
         const data = {
+          name,
+          status: el.status.value === 'inactiva' ? 'inactiva' : 'activa',
+          target: intOrNull(el.target.value),
+          demosTarget: intOrNull(el.demosTarget.value),
           sales: n(el.sales.value),
           demosDone: n(el.demosDone.value),
           demosScheduled: n(el.demosScheduled.value),
+          personalGoal: el.personalGoal.value.trim(),
+          needs: el.needs.value.trim(),
           nextAction: el.nextAction.value.trim(),
+          followUpDate: el.followUpDate.value,
+          notes: el.notes.value.trim(),
         };
-        return mutate(() => update('agents', a.id, data), 'Avance guardado');
+        if (isNew && state.tab !== 'agentes') setTab('agentes');
+        return mutate(
+          () => (isNew ? create('agents', emptyAgent(data)) : update('agents', agent.id, data)),
+          isNew ? `${name} se sumó a tu equipo` : 'Cambios guardados'
+        );
       },
     });
   }
@@ -831,7 +909,9 @@
         <span><span class="dot" style="--dot:var(--yellow)"></span>Necesita seguimiento</span>
         <span><span class="dot" style="--dot:var(--orange)"></span>Requiere atención</span>
         <span><span class="dot" style="--dot:var(--red)"></span>Necesita intervención</span>
-        <span><span class="dot" style="--dot:var(--purple)"></span>Recién empieza</span>
+        <span class="legend-sep"></span>
+        <span><i class="swatch" style="background:#00AC46"></i>Ventas</span>
+        <span><i class="swatch" style="background:#3782CD"></i>Demos</span>
         <span><span class="legend-sched"></span>Demos agendadas</span>
       </div>
       <div class="compare-row compare-head">
@@ -848,8 +928,8 @@
                 <span class="compare-situation">${esc(sit.label)}</span>
               </div>
             </div>
-            ${metric({ label: 'Ventas', done: a.sales, target: a.target, unit: '', compact: true })}
-            ${metric({ label: 'Demos', done: a.demosDone, target: a.demosTarget, scheduled: a.demosScheduled, unit: '', compact: true })}
+            ${metric({ label: 'Ventas', done: a.sales, target: a.target, unit: '', compact: true, color: SALES_COLOR })}
+            ${metric({ label: 'Demos', done: a.demosDone, target: a.demosTarget, scheduled: a.demosScheduled, unit: '', compact: true, color: DEMOS_COLOR })}
           </div>`;
       }).join('')}`;
   }
@@ -942,8 +1022,8 @@
           <div class="field">
             <span class="field-label">Estado</span>
             ${choiceGroup('status', [
-              { value: 'pendiente', label: 'Pendiente', color: '#F5A01E' },
-              { value: 'en_proceso', label: 'En proceso', color: '#3782CD' },
+              { value: 'pendiente', label: 'Pendiente', color: '#707070' },
+              { value: 'en_proceso', label: 'En proceso', color: '#252525' },
               { value: 'realizado', label: 'Realizado', color: '#00AC46' },
             ], x.status)}
           </div>
@@ -1019,10 +1099,6 @@
         <div class="field">
           <span class="field-label">Estado</span>
           ${choiceGroup('ficha-status', [{ value: 'activa', label: 'Activa' }, { value: 'inactiva', label: 'Inactiva', color: '#707070' }], a.status).replace(/name="ficha-status"/g, 'name="ficha-status" data-field="status"')}
-          <label class="toggle toggle-new toggle-sm">
-            <input type="checkbox" data-field="isNew" ${a.isNew ? 'checked' : ''}>
-            <span><b>Es nueva</b> (se sumó en ${esc(periodLabel())})</span>
-          </label>
         </div>
       </div>
 
@@ -1053,7 +1129,7 @@
           <div id="ficha-sales"></div>
         </section>
 
-        <section class="ficha-card" style="--num-bg:#FEF4E4;--num-fg:#B66F00">
+        <section class="ficha-card" style="--num-bg:#F0F0F0;--num-fg:#4A4A4A">
           <h2><span class="num">4</span>Su seguimiento</h2>
           ${fichaText('notes', 'Observaciones', a.notes, true)}
           ${fichaText('needs', '¿Qué necesita trabajar?', a.needs, true, 'Dificultades o aspectos a acompañar')}
@@ -1124,7 +1200,6 @@
     if (['demosDone', 'demosScheduled', 'sales'].includes(f)) return n(el.value);
     if (f === 'name') return el.value.trim().replace(/\s+/g, ' ');
     if (f === 'status') return el.value === 'inactiva' ? 'inactiva' : 'activa';
-    if (f === 'isNew') return el.checked;
     return el.type === 'date' ? el.value : el.value.trim();
   }
 
@@ -1193,7 +1268,7 @@
     const salesBox = $('#ficha-sales');
     if (salesBox) {
       salesBox.innerHTML = `<div class="big-progress">${calc.hasTarget(a.target)
-        ? metric({ label: 'Avance de ventas', done: a.sales, target: a.target, unit: 'ventas' })
+        ? metric({ label: 'Avance de ventas', done: a.sales, target: a.target, unit: 'ventas', color: SALES_COLOR })
         : '<span>Definí su objetivo de ventas en "Su objetivo" para ver el avance.</span>'}</div>`;
     }
     const conv = $('#ficha-convert');
@@ -1209,7 +1284,7 @@
           : `<p class="ficha-note">Si hace las agendadas llega a <b>${reach} de ${n(a.demosTarget)}</b>: le faltaría agendar ${n(a.demosTarget) - reach}.</p>`;
       }
       demosBox.innerHTML = `<div class="big-progress">${calc.hasTarget(a.demosTarget)
-        ? metric({ label: 'Avance de demos', done: a.demosDone, target: a.demosTarget, scheduled: sched, unit: 'demos' }) + note
+        ? metric({ label: 'Avance de demos', done: a.demosDone, target: a.demosTarget, scheduled: sched, unit: 'demos', color: DEMOS_COLOR }) + note
         : '<span>Definí su objetivo de demos en "Su objetivo" para ver el avance.</span>'}</div>`;
     }
   }
@@ -1227,14 +1302,7 @@
   function printSummary() {
     const { goals, agents, actions } = state.data;
     const totals = calc.teamTotals(agents);
-    const main = calc.mainGoals(goals);
-    const teamLine = (type) => {
-      const goal = main[type];
-      const done = calc.mainAchieved(type, totals);
-      if (!goal || !calc.hasTarget(goal.target)) return `<b>${done}</b>sin objetivo definido`;
-      return `<b>${done} de ${n(goal.target)}</b>${calc.percent(done, goal.target)}% · faltan ${calc.pending(done, goal.target)}`;
-    };
-    const others = calc.otherGoals(goals);
+    const sortedGoals = goals.slice().sort((x, y) => (GOAL_ORDER[x.type] ?? 3) - (GOAL_ORDER[y.type] ?? 3));
     const fmtGoal = (done, target) => (calc.hasTarget(target) ? `${n(done)} / ${n(target)} (${calc.percent(done, target)}%)` : `${n(done)} / –`);
     const openActions = sortActions(actions.filter((x) => x.status !== 'realizado'));
 
@@ -1245,22 +1313,17 @@
       </div>
 
       <h2>Objetivos de mi equipo</h2>
-      <div class="pr-stats">
-        <div>Ventas${teamLine('ventas')}</div>
-        <div>Demos${teamLine('demos')}${totals.demosScheduled ? ` · ${totals.demosScheduled} agendadas` : ''}</div>
-        <div>Agentes nuevas${teamLine('reclutamiento')}</div>
-        <div>Equipo<b>${totals.count} agentes</b>${totals.active} activas</div>
-      </div>
-      ${others.length ? `<table><thead><tr><th>Otros objetivos</th><th>Meta</th><th>Logrado</th><th>Avance</th></tr></thead><tbody>
-        ${others.map((g) => {
-          const p = calc.percent(g.achieved, g.target);
-          return `<tr><td>${esc(goalTitle(g))}</td><td>${calc.hasTarget(g.target) ? n(g.target) : '–'}</td><td>${n(g.achieved)}</td><td>${p == null ? '–' : p + '%'}</td></tr>`;
-        }).join('')}</tbody></table>` : ''}
+      <p>${totals.count} agentes (${totals.active} activas) · ${totals.sales} ventas hechas · ${totals.demos} demos hechas${totals.demosScheduled ? ` · ${totals.demosScheduled} demos agendadas` : ''}</p>
+      ${sortedGoals.length ? `<table><thead><tr><th>Tipo</th><th>Objetivo</th><th>Meta</th><th>Logrado</th><th>Faltan</th><th>Avance</th></tr></thead><tbody>
+        ${sortedGoals.map((g) => {
+          const ach = calc.goalAchieved(g, totals); const p = calc.percent(ach, g.target);
+          return `<tr><td>${goalInfo(g.type).label}</td><td>${esc(goalTitle(g))}</td><td>${calc.hasTarget(g.target) ? n(g.target) : '–'}</td><td>${ach}</td><td>${calc.hasTarget(g.target) ? calc.pending(ach, g.target) : '–'}</td><td>${p == null ? '–' : p + '%'}</td></tr>`;
+        }).join('')}</tbody></table>` : '<p class="pr-empty">Sin objetivos cargados.</p>'}
 
       <h2>Mi equipo, agente por agente</h2>
       ${agents.length ? `<table><thead><tr><th>Agente</th><th>Estado</th><th>Ventas (hechas / objetivo)</th><th>Demos (hechas / objetivo)</th><th>Demos agendadas</th><th>Situación</th><th>Próxima acción</th></tr></thead><tbody>
         ${agents.map((a) => {
-          return `<tr><td>${esc(a.name)}</td><td>${a.status === 'inactiva' ? 'Inactiva' : 'Activa'}${a.isNew ? ' · Nueva' : ''}</td><td>${fmtGoal(a.sales, a.target)}</td><td>${fmtGoal(a.demosDone, a.demosTarget)}</td><td>${n(a.demosScheduled)}</td><td>${esc(calc.agentSituation(a).label)}</td><td>${esc(a.nextAction)}${a.followUpDate ? ` (${fmtDate(a.followUpDate)})` : ''}</td></tr>`;
+          return `<tr><td>${esc(a.name)}</td><td>${a.status === 'inactiva' ? 'Inactiva' : 'Activa'}</td><td>${fmtGoal(a.sales, a.target)}</td><td>${fmtGoal(a.demosDone, a.demosTarget)}</td><td>${n(a.demosScheduled)}</td><td>${esc(calc.agentSituation(a).label)}</td><td>${esc(a.nextAction)}${a.followUpDate ? ` (${fmtDate(a.followUpDate)})` : ''}</td></tr>`;
         }).join('')}</tbody></table>` : '<p class="pr-empty">Sin agentes cargadas.</p>'}
 
       <h2>Mi seguimiento (acciones por hacer)</h2>
@@ -1312,14 +1375,13 @@
         case 'print': printSummary(); break;
         case 'tour': if (state.currentAgentId) { location.hash = '#/'; setTimeout(KGC.tour.start, 300); } else KGC.tour.start(); break;
         case 'tab': setTab(el.dataset.tab); break;
-        case 'main-goal': mainGoalForm(el.dataset.type); break;
         case 'goal-step': stepGoal(id, Number(el.dataset.delta)); break;
         case 'ficha-convert': fichaConvert(); break;
-        case 'progress': progressForm(state.data.agents.find((a) => a.id === id)); break;
-        case 'add-goal': goalForm(null); break;
+        case 'add-goal': goalForm(null, el.dataset.type); break;
         case 'edit-goal': goalForm(state.data.goals.find((g) => g.id === id)); break;
         case 'delete-goal': deleteGoal(id); break;
         case 'add-agent': agentForm(); break;
+        case 'edit-agent': agentForm(state.data.agents.find((a) => a.id === id)); break;
 
         case 'delete-agent': deleteAgent(id); break;
         case 'view-agent': location.hash = `#/agente/${encodeURIComponent(id)}`; break;

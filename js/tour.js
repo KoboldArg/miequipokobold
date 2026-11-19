@@ -9,6 +9,11 @@ KGC.tour = (function () {
       text: 'Cada período guarda su información por separado. Tocá P12 o P13 para ver y cargar los datos de ese período.',
     },
     {
+      el: '#getting-started', tab: 'resumen',
+      title: 'Cómo empezar',
+      text: 'Tres pasos en orden: los objetivos del equipo, tus agentes y el objetivo de cada una. Esta guía desaparece cuando completás los tres.',
+    },
+    {
       el: '#tabs', tab: 'resumen',
       title: 'Tres pestañas',
       text: 'Resumen: cómo viene tu equipo. Mis agentes: cada una con sus números. Seguimiento: lo que vas a hacer esta semana.',
@@ -16,7 +21,7 @@ KGC.tour = (function () {
     {
       el: '#sec-summary', tab: 'resumen',
       title: 'Objetivos de tu equipo',
-      text: 'Tocá «Definir objetivo» en Ventas, Demos y Agentes nuevas y escribí el número. El avance se suma solo con lo que cargás en cada agente.',
+      text: 'Tocá «+ Agregar objetivo» y elegí Ventas, Demos, Reclutamiento u Otro. Ventas y demos se suman solas con lo que cargás en cada agente; reclutamiento y otros los sumás con + y −.',
     },
     {
       el: '#sec-compare', tab: 'resumen',
@@ -26,7 +31,7 @@ KGC.tour = (function () {
     {
       el: '#sec-agents', tab: 'agentes',
       title: 'Tus agentes',
-      text: 'Agregá a cada agente con sus objetivos. Cada semana tocá «Cargar avance» para sumar ventas y demos. En «Ver ficha» está todo su seguimiento.',
+      text: 'Agregá a cada agente con su estado, su objetivo, lo que lleva hecho y su seguimiento. Con «Actualizar datos» corregís o sumás lo nuevo; en «Ver ficha» ves todo junto.',
     },
     {
       el: '#sec-actions', tab: 'seguimiento',

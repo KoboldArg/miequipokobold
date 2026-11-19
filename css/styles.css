@@ -154,12 +154,10 @@ svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width:
   margin-top: 20px; box-shadow: var(--shadow);
 }
 /* Cada sección tiene su color e ícono para reconocerla de un vistazo */
-.sec-summary { --sec: #00AC46; --sec-soft: #E6F7ED; --sec-ink: #008F3A; }
-.sec-goals   { --sec: #F5A01E; --sec-soft: #FEF4E4; --sec-ink: #B66F00; }
-.sec-agents  { --sec: #734BA5; --sec-soft: #F1ECF7; --sec-ink: #734BA5; }
-.sec-compare { --sec: #3782CD; --sec-soft: #EAF2FA; --sec-ink: #2F6FAF; }
-.sec-actions { --sec: #FAD400; --sec-soft: #FFF8CC; --sec-ink: #8A7500; }
-.section[class*=" sec-"] { border-top: 5px solid var(--sec); }
+/* Las secciones usan el verde Kobold como identidad. Los demás colores tienen un solo significado:
+   verde = ventas · azul = demos · violeta = reclutamiento · naranja = otros objetivos ·
+   semáforo (verde/amarillo/naranja/rojo) solo en el punto de situación de cada agente. */
+.section[class*=" sec-"] { --sec-soft: #E6F7ED; --sec-ink: #008F3A; }
 .sec-title { display: flex; align-items: center; gap: 14px; min-width: 0; }
 .sec-icon {
   width: 46px; height: 46px; border-radius: 14px; flex-shrink: 0;
@@ -203,9 +201,7 @@ svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width:
   border: 2px solid transparent; background: var(--white); color: var(--ink-2);
   font-weight: 800; font-size: 17px; cursor: pointer; box-shadow: var(--shadow);
 }
-.tab-agentes { --c: #734BA5; --c-soft: #F1ECF7; --c-ink: #734BA5; }
-.tab-seguimiento { --c: #E0B800; --c-soft: #FFF8CC; --c-ink: #7A6600; }
-.tab-icon { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; background: var(--c-soft); color: var(--c-ink); }
+.tab-icon { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; background: var(--bg); color: var(--ink-2); }
 .tab-icon svg { width: 20px; height: 20px; }
 .tab:hover { border-color: var(--c); }
 .tab.is-active { background: var(--c-soft); border-color: var(--c); color: var(--c-ink); }
@@ -271,6 +267,62 @@ svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width:
 .toggle-sm { padding: 8px 12px; font-size: 14px; margin-top: 8px; }
 .form-block-goals { background: var(--bg); }
 .btn-convert { justify-self: start; }
+
+/* ---------- Cómo empezar ---------- */
+.getting-started {
+  background: var(--white); border-radius: var(--radius-lg); padding: 22px 28px; margin-top: 20px;
+  box-shadow: var(--shadow); border: 2px solid var(--green);
+}
+.getting-started h2 { font-size: 19px; margin-bottom: 12px; }
+.start-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.start-step { display: grid; grid-template-columns: auto 1fr auto; gap: 14px; align-items: center; padding: 10px 12px; border-radius: var(--radius-sm); }
+.start-step.is-next { background: var(--green-soft); }
+.start-num {
+  width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-weight: 800;
+  background: var(--white); border: 2px solid var(--green); color: var(--green-dark);
+}
+.start-step.is-done .start-num { background: var(--green); color: var(--white); }
+.start-step.is-done .start-text b { color: var(--muted); text-decoration: line-through; }
+.start-step:not(.is-next):not(.is-done) { opacity: .6; }
+.start-text { display: grid; }
+.start-text span { font-size: 14px; color: var(--muted); }
+
+/* ---------- Elegir tipo de objetivo ---------- */
+.goal-starter-title { font-weight: 700; margin-bottom: 12px; }
+.goal-type-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.goal-type {
+  display: grid; justify-items: center; gap: 6px; padding: 18px 12px; border-radius: var(--radius);
+  border: 2px solid var(--c-soft); background: var(--c-soft); cursor: pointer; text-align: center;
+}
+.goal-type:hover, .goal-type:focus-visible { border-color: var(--c); outline: 0; }
+.goal-type-icon { width: 48px; height: 48px; border-radius: 14px; background: var(--white); color: var(--c-ink); display: grid; place-items: center; }
+.goal-type-icon svg { width: 26px; height: 26px; }
+.goal-type-label { font-weight: 800; font-size: 17px; color: var(--c-ink); }
+.goal-type-hint { font-size: 13px; color: var(--ink-2); }
+.modal-body .goal-type-grid { grid-template-columns: 1fr 1fr; }
+
+.tgoal-titles { flex: 1; min-width: 0; display: grid; }
+.tgoal-type { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--c-ink); }
+.tgoal-titles h3 { font-size: 17px; overflow-wrap: anywhere; }
+.tgoal-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.tgoal .mini-stepper button:hover:not(:disabled) { border-color: var(--c); color: var(--c-ink); }
+.tgoal-cta { justify-self: start; }
+.how-box { background: var(--bg); border-radius: var(--radius-sm); padding: 12px 14px; font-size: 14px; color: var(--ink-2); }
+
+/* ---------- Formulario de agente por pasos ---------- */
+.form-step { display: grid; gap: 12px; padding: 16px; border-radius: var(--radius); background: var(--bg); }
+.form-step-title { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 16px; }
+.form-step-num {
+  width: 28px; height: 28px; border-radius: 50%; background: var(--green); color: var(--white);
+  display: grid; place-items: center; font-size: 14px; flex-shrink: 0;
+}
+.form-step .field-help { margin-top: -6px; }
+.form-step input, .form-step textarea, .form-step .stepper button { background: var(--white); }
+.form-row-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.convert-cell { display: flex; align-items: flex-end; padding-bottom: 6px; }
+
+.legend-sep { width: 1px; height: 16px; background: var(--line); }
+.swatch { display: inline-block; width: 16px; height: 8px; border-radius: 4px; }
 
 /* ---------- Barras de progreso ---------- */
 .bar { height: 12px; border-radius: 999px; background: #ECECEC; overflow: hidden; }
@@ -457,8 +509,8 @@ svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width:
 .action-next { color: var(--ink-2); margin-top: 2px; }
 .action-meta { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; align-items: center; font-size: 13px; color: var(--muted); }
 .action-meta .pill { font-size: 12px; }
-.st-pendiente { background: #FFF6D1; color: #7A6600; }
-.st-en_proceso { background: #EAF2FA; color: #1F5F9E; }
+.st-pendiente { background: #F0F0F0; color: #4A4A4A; }
+.st-en_proceso { background: #252525; color: #FFFFFF; }
 .st-realizado { background: var(--green-soft); color: var(--green-dark); }
 .action-btns { display: flex; gap: 2px; }
 .late { color: var(--red); font-weight: 700; }
@@ -610,6 +662,13 @@ dialog::backdrop { background: rgba(37, 37, 37, .45); }
   .logo { font-size: 18px; }
   .brand { flex-basis: 100%; }
   .tl-box { flex: 1; min-width: 0; }
+  .getting-started { padding: 18px 16px; }
+  .start-step { grid-template-columns: auto 1fr; }
+  .start-step .btn { grid-column: 1 / -1; width: 100%; }
+  .goal-type-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .goal-type { padding: 14px 8px; }
+  .form-row-3 { grid-template-columns: 1fr; }
+  .form-step { padding: 14px 12px; }
   .tabs { gap: 6px; margin-top: 14px; }
   .tab { flex-direction: column; gap: 4px; min-height: 72px; padding: 8px 4px; font-size: 13px; position: relative; }
   .tab-icon { width: 32px; height: 32px; }

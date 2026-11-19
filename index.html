@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/styles.css?v=9">
+  <link rel="stylesheet" href="css/styles.css?v=12">
 </head>
 <body>
 
@@ -75,6 +75,9 @@
           </div>
         </section>
 
+        <!-- Cómo empezar (se oculta cuando están los 3 pasos) -->
+        <section class="getting-started" id="getting-started" hidden></section>
+
         <!-- Pestañas -->
         <nav class="tabs" id="tabs" role="tablist" aria-label="Secciones">
           <button class="tab tab-resumen" role="tab" id="tab-resumen" data-act="tab" data-tab="resumen" aria-controls="panel-resumen">
@@ -99,9 +102,9 @@
                   <p class="section-sub" id="team-size"></p>
                 </div>
               </div>
+              <button class="btn btn-primary" data-act="add-goal" id="btn-add-goal-top">+ Agregar objetivo</button>
             </div>
-            <div class="team-goals" id="team-goals"></div>
-            <div id="other-goals"></div>
+            <div id="goals"></div>
           </section>
 
           <section class="section sec-compare" id="sec-compare" aria-labelledby="compare-title">
@@ -194,10 +197,10 @@
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-  <script src="js/config.js?v=9"></script>
-  <script src="js/storage.js?v=9"></script>
-  <script src="js/calc.js?v=9"></script>
-  <script src="js/tour.js?v=9"></script>
-  <script src="js/app.js?v=9"></script>
+  <script src="js/config.js?v=12"></script>
+  <script src="js/storage.js?v=12"></script>
+  <script src="js/calc.js?v=12"></script>
+  <script src="js/tour.js?v=12"></script>
+  <script src="js/app.js?v=12"></script>
 </body>
 </html>
