@@ -1034,8 +1034,13 @@
               ${textField('nextAction', 'Próxima acción', a.nextAction, { placeholder: 'Ej.: acompañarla en una demo' })}
               ${textField('followUpDate', 'Fecha de seguimiento', a.followUpDate, { type: 'date' })}
             </div>
+            <p class="field-help">La próxima acción también aparece en la pestaña <b>Seguimiento</b>.</p>
             ${textField('notes', 'Observaciones', a.notes, { multiline: true })}
           </section>
+          ${isNew ? '' : `
+          <div class="form-danger">
+            <button type="button" class="btn btn-ghost btn-danger-text" data-act="delete-agent" data-id="${a.id}">${ICONS.trash} Eliminar agente</button>
+          </div>`}
         </div>`,
       onOpen: (form) => {
         const el = form.elements;
@@ -1072,7 +1077,10 @@
         };
         if (isNew && state.tab !== 'agentes') setTab('agentes');
         return mutate(
-          () => (isNew ? create('agents', emptyAgent(data)) : update('agents', agent.id, data)),
+          async () => {
+            const saved = isNew ? await create('agents', emptyAgent(data)) : await update('agents', agent.id, data);
+            await syncAgentAction(saved.id, isNew ? '' : agent.nextAction, data.nextAction, data.followUpDate);
+          },
           isNew ? `${name} se sumó a tu equipo` : 'Cambios guardados'
         );
       },
@@ -1088,6 +1096,7 @@
       message: `Se borran sus datos de ${periodLabel()}${linked ? ` y ${linked === 1 ? 'su acción' : `sus ${linked} acciones`} de seguimiento` : ''}, y sus ventas y demos dejan de sumar al equipo. Si dejó de trabajar, mejor marcala como inactiva. Esta acción no se puede deshacer.`,
     });
     if (!ok) return;
+    closeModal();
     const wasInFicha = state.currentAgentId === id;
     if (wasInFicha) { cancelFichaSave(); state.currentAgentId = null; }
     await mutate(async () => {
@@ -1258,18 +1267,50 @@
           status: el.status.value,
         };
         return mutate(
-          () => (isNew ? create('actions', data) : update('actions', action.id, data)),
+          async () => {
+            if (isNew) { await create('actions', data); return; }
+            await update('actions', action.id, data);
+            // si esta acción es la "próxima acción" de la agente, se actualiza también en su ficha
+            const ag = action.agentId && state.data.agents.find((a) => a.id === action.agentId);
+            if (ag && String(ag.nextAction || '').trim() === action.topic && data.agentId === action.agentId) {
+              await update('agents', ag.id, { nextAction: data.topic, followUpDate: data.date });
+            }
+          },
           isNew ? 'Acción agregada' : 'Acción actualizada'
         );
       },
     });
   }
 
+  /* La "próxima acción" que se escribe en la agente aparece en Seguimiento:
+   * se crea una acción pendiente para esa agente, y si después se cambia el texto
+   * o la fecha, se actualiza esa misma acción (no se duplica). */
+  async function syncAgentAction(agentId, prevText, nextText, date) {
+    const next = String(nextText || '').trim();
+    if (!next) return;
+    const prev = String(prevText || '').trim();
+    const open = state.data.actions.filter((x) => x.agentId === agentId && x.status !== 'realizado');
+    const match = (prev && open.find((x) => x.topic === prev)) || open.find((x) => x.topic === next);
+    if (match) {
+      if (match.topic !== next || (match.date || '') !== (date || '')) {
+        await update('actions', match.id, { topic: next, date: date || '' });
+      }
+    } else {
+      await create('actions', { agentId, topic: next, nextAction: '', date: date || '', status: 'pendiente' });
+    }
+  }
+
   function toggleAction(id) {
     const x = state.data.actions.find((a) => a.id === id);
     if (!x) return;
     const next = x.status === 'realizado' ? 'pendiente' : 'realizado';
-    mutate(() => update('actions', id, { status: next }), next === 'realizado' ? '¡Acción realizada!' : 'La acción volvió a pendiente');
+    const ag = x.agentId && state.data.agents.find((a) => a.id === x.agentId);
+    mutate(async () => {
+      await update('actions', id, { status: next });
+      if (next === 'realizado' && ag && String(ag.nextAction || '').trim() === x.topic) {
+        await update('agents', ag.id, { nextAction: '', followUpDate: '' });
+      }
+    }, next === 'realizado' ? '¡Acción realizada!' : 'La acción volvió a pendiente');
   }
 
   async function deleteAction(id) {
@@ -1454,11 +1495,16 @@
     }
     fichaSaving = fichaSaving.then(async () => {
       try {
-        await update('agents', id, patch);
+        const before = state.data.agents.find((x) => x.id === id) || {};
+        const saved = await update('agents', id, patch);
+        if ('nextAction' in patch || 'followUpDate' in patch) {
+          await syncAgentAction(id, before.nextAction, saved.nextAction, saved.followUpDate);
+        }
         await loadPeriod();
         const a = state.data.agents.find((x) => x.id === id);
         if (a && state.currentAgentId === id) {
           updateFichaComputed(a);
+          renderFichaActions(a);
           const ind = $('#saved-indicator');
           if (ind) {
             ind.classList.add('show');
