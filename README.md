@@ -43,9 +43,16 @@ Sumar una línea en `js/config.js` → `periods`, por ejemplo `{ id: 'P01-2027',
 
 La hoja de estilos usa `Vorwerk` si está instalada en la computadora; si no, `Nunito` (Google Fonts) y luego la fuente del sistema. Para incluir Vorwerk como archivo, agregar un `@font-face` al inicio de `css/styles.css`.
 
-## Paso a base de datos compartida (Supabase)
+## Base compartida (Supabase)
 
-1. `supabase/schema.sql`: crea tablas, períodos y permisos (cada TL ve lo suyo; administración ve todo).
-2. En Authentication: desactivar el registro libre y la confirmación por mail; crear los usuarios.
-3. `supabase/usuarios.sql`: vincula cada usuario como TL o administración.
-4. En la app: reemplazar `KGC.store = KGC.createLocalStore()` por un store de Supabase con la misma interfaz y sumar la pantalla de ingreso con usuario y contraseña.
+La app usa Supabase si `js/config.js` tiene el bloque `supabase` (URL, clave publishable y dominio de usuarios de TL). Sin ese bloque, vuelve a guardar solo en el navegador.
+
+- **TL**: entran con su usuario (ej. `laura`) y contraseña; la app completa `@tl.tharsa.com.ar`.
+- **Administración**: entra con su mail completo y ve el panel con todas las TL (solo lectura).
+- `js/supabase-store.js`: conexión y conversión de datos. `js/admin.js`: panel de administración.
+
+Configuración en Supabase:
+1. `supabase/schema.sql` (tablas, períodos, permisos y accesos).
+2. Authentication: sin registro libre y sin confirmación por mail.
+3. Crear usuarios en Authentication → Users y vincularlos con `supabase/usuarios.sql`.
+4. Para sumar un período: `insert into periods (id, label, sort_order) values ('P01-2027', 'P01 · 2027', 14);`

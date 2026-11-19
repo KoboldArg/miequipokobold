@@ -58,6 +58,8 @@ KGC.createLocalStore = function createLocalStore() {
   };
 
   return {
+    mode: 'local',
+    async getPeriods() { return KGC.config.periods.slice(); },
     async getSession() { return read('session', null); },
     async setSession(session) { write('session', session); },
     async clearSession() { localStorage.removeItem(PREFIX + 'session'); },

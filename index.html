@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/styles.css?v=15">
+  <link rel="stylesheet" href="css/styles.css?v=18">
 </head>
 <body>
 
@@ -21,13 +21,54 @@
       <h1>¡Bienvenida a tu espacio de gestión comercial!</h1>
       <p class="welcome-sub">Organizá tu equipo, revisá tus objetivos y acompañá el crecimiento de tus agentes.</p>
       <form id="welcome-form" class="welcome-form" novalidate>
-        <label for="welcome-name">Nombre de la Team Leader</label>
-        <input id="welcome-name" name="name" type="text" placeholder="Escribí tu nombre" autocomplete="given-name" maxlength="60">
-        <p class="field-error" id="welcome-error" hidden>Escribí tu nombre para comenzar.</p>
-        <button type="submit" class="btn btn-primary btn-lg btn-block">Comenzar</button>
+        <!-- Con base compartida (Supabase): usuario y contraseña -->
+        <div class="login-fields" id="login-fields" hidden>
+          <label for="login-user">Usuario</label>
+          <input id="login-user" name="user" type="text" placeholder="Ej.: laura" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="120">
+          <label for="login-pass">Contraseña</label>
+          <div class="pass-wrap">
+            <input id="login-pass" name="password" type="password" placeholder="Tu contraseña" autocomplete="current-password" maxlength="120">
+            <button type="button" class="pass-toggle" id="pass-toggle" aria-label="Mostrar contraseña">Ver</button>
+          </div>
+        </div>
+        <!-- Sin base compartida (modo local): solo el nombre -->
+        <div class="login-fields" id="name-fields" hidden>
+          <label for="welcome-name">Nombre de la Team Leader</label>
+          <input id="welcome-name" name="name" type="text" placeholder="Escribí tu nombre" autocomplete="given-name" maxlength="60">
+        </div>
+        <p class="field-error" id="welcome-error" hidden></p>
+        <button type="submit" class="btn btn-primary btn-lg btn-block" id="welcome-submit">Comenzar</button>
       </form>
-      <p class="welcome-note">Tu información se guarda en este navegador. Si ya ingresaste antes, escribí el mismo nombre para volver a tu espacio.</p>
+      <p class="welcome-note" id="welcome-note"></p>
     </div>
+  </div>
+
+  <!-- ============ ADMINISTRACIÓN ============ -->
+  <div id="screen-admin" hidden>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <span class="brand">
+          <span class="logo">KOBOLD</span>
+          <span class="brand-title">Panel de administración</span>
+        </span>
+        <div class="admin-user">
+          <span class="tl-avatar" id="admin-avatar" aria-hidden="true"></span>
+          <strong id="admin-name" class="hide-sm"></strong>
+          <button class="btn btn-ghost btn-sm" data-act="logout">Salir</button>
+        </div>
+      </div>
+    </header>
+    <main class="container">
+      <section class="period-bar">
+        <div class="period-intro">
+          <p class="hello" id="admin-hello"></p>
+          <h2>Cómo viene cada Team Leader</h2>
+        </div>
+        <div class="period-switch" id="admin-period-switch" role="radiogroup" aria-label="Período"></div>
+      </section>
+      <section class="section" id="admin-totals"></section>
+      <div id="admin-tls"></div>
+    </main>
   </div>
 
   <!-- ============ APLICACIÓN ============ -->
@@ -213,10 +254,13 @@
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-  <script src="js/config.js?v=15"></script>
-  <script src="js/storage.js?v=15"></script>
-  <script src="js/calc.js?v=15"></script>
-  <script src="js/tour.js?v=15"></script>
-  <script src="js/app.js?v=15"></script>
+  <script src="js/config.js?v=18"></script>
+  <script src="js/storage.js?v=18"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
+  <script src="js/supabase-store.js?v=18"></script>
+  <script src="js/calc.js?v=18"></script>
+  <script src="js/tour.js?v=18"></script>
+  <script src="js/app.js?v=18"></script>
+  <script src="js/admin.js?v=18"></script>
 </body>
 </html>

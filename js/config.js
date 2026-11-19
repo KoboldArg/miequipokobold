@@ -5,6 +5,15 @@ window.KGC = window.KGC || {};
 KGC.config = {
   appName: 'Gestión comercial de mi equipo',
 
+  /* Base compartida. La clave "publishable" es pública por diseño: las reglas de la base
+   * (supabase/schema.sql) limitan qué ve cada persona. Para usar solo este navegador, borrar este bloque. */
+  supabase: {
+    url: 'https://fmcpgrxqnacvxvqmzrjs.supabase.co',
+    key: 'sb_publishable_Vcvb0moNzD5fph3XLZzAEw_zz5EOr-U',
+    tlDomain: 'tl.tharsa.com.ar', // las TL escriben "laura" y entran como laura@tl.tharsa.com.ar
+  },
+
+  /* Períodos de respaldo (con Supabase, los períodos salen de la tabla "periods"). */
   periods: [
     { id: 'P12-2026', label: 'P12 · 2026' },
     { id: 'P13-2026', label: 'P13 · 2026' },

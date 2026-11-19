@@ -8,6 +8,7 @@
   /* ---------------- Estado ---------------- */
   const state = {
     tl: null,
+    periods: config.periods.slice(),
     periodId: config.periods[0].id,
     data: { goals: [], agents: [], actions: [] },
     search: '',
@@ -21,7 +22,7 @@
   const $ = (sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const periodLabel = (id = state.periodId) => (config.periods.find((p) => p.id === id) || {}).label || id;
+  const periodLabel = (id = state.periodId) => (state.periods.find((p) => p.id === id) || {}).label || id;
   const initials = (name) => String(name || '').trim().split(/\s+/).slice(0, 2).map((w) => w[0] || '').join('').toUpperCase() || '·';
   const byName = (a, b) => String(a.name).localeCompare(String(b.name), 'es', { sensitivity: 'base' });
   const byCreated = (a, b) => String(a.createdAt).localeCompare(String(b.createdAt));
@@ -223,43 +224,120 @@
   const remove = (coll, id) => store.remove(state.tl.id, state.periodId, coll, id);
 
   /* ---------------- Inicio ---------------- */
+  const isShared = () => store.mode === 'supabase';
+
   async function init() {
     bindGlobalEvents();
-    const session = await store.getSession();
-    if (session && session.tlId) {
-      const tl = await store.getTL(session.tlId);
-      if (tl) {
-        state.tl = tl;
-        if (config.periods.some((p) => p.id === session.periodId)) state.periodId = session.periodId;
-        return enterApp();
-      }
+    setupWelcome();
+    if (KGC.storeError) {
+      showWelcome('No pudimos conectar con la base de datos. Revisá tu conexión a internet y volvé a cargar la página.');
+      return;
     }
-    showWelcome();
+    try {
+      if (isShared()) {
+        const account = await store.getAccount();
+        if (account) return openAccount(account);
+        return showWelcome();
+      }
+      const session = await store.getSession();
+      if (session && session.tlId) {
+        const tl = await store.getTL(session.tlId);
+        if (tl) {
+          state.tl = tl;
+          await loadPeriods(session.periodId);
+          return enterApp();
+        }
+      }
+      showWelcome();
+    } catch (err) {
+      console.error(err);
+      showWelcome('No pudimos conectar con la base de datos. Revisá tu conexión y volvé a intentar.');
+    }
   }
 
-  function showWelcome() {
+  /* Períodos: de la base (Supabase) o de la configuración (modo local). */
+  async function loadPeriods(preferred) {
+    try {
+      const list = await store.getPeriods();
+      if (list && list.length) state.periods = list;
+    } catch (err) {
+      console.error(err);
+    }
+    const saved = preferred || ((await store.getSession()) || {}).periodId;
+    state.periodId = state.periods.some((p) => p.id === saved) ? saved : state.periods[0].id;
+  }
+
+  function setupWelcome() {
+    $('#login-fields').hidden = !isShared();
+    $('#name-fields').hidden = isShared();
+    $('#welcome-submit').textContent = isShared() ? 'Ingresar' : 'Comenzar';
+    $('#welcome-note').textContent = isShared()
+      ? 'Si no tenés usuario o te olvidaste la contraseña, pedíselo a administración.'
+      : 'Tu información se guarda en este navegador. Si ya ingresaste antes, escribí el mismo nombre para volver a tu espacio.';
+    $('#pass-toggle').addEventListener('click', () => {
+      const input = $('#login-pass');
+      const show = input.type === 'password';
+      input.type = show ? 'text' : 'password';
+      $('#pass-toggle').textContent = show ? 'Ocultar' : 'Ver';
+      $('#pass-toggle').setAttribute('aria-label', show ? 'Ocultar contraseña' : 'Mostrar contraseña');
+    });
+  }
+
+  function welcomeError(msg, input) {
+    const el = $('#welcome-error');
+    el.textContent = msg;
+    el.hidden = !msg;
+    $$('#welcome-form input').forEach((i) => i.classList.remove('invalid'));
+    if (input) { input.classList.add('invalid'); input.focus(); }
+  }
+
+  function showWelcome(message) {
     $('#screen-app').hidden = true;
+    $('#screen-admin').hidden = true;
     $('#screen-welcome').hidden = false;
     document.title = 'Gestión comercial de mi equipo | Kobold';
-    const input = $('#welcome-name');
-    input.value = '';
-    $('#welcome-error').hidden = true;
-    input.classList.remove('invalid');
-    setTimeout(() => input.focus(), 50);
+    $('#welcome-name').value = '';
+    $('#login-pass').value = '';
+    $('#login-pass').type = 'password';
+    $('#pass-toggle').textContent = 'Ver';
+    welcomeError(message || '');
+    const first = isShared() ? $('#login-user') : $('#welcome-name');
+    setTimeout(() => first.focus(), 50);
   }
 
   async function handleWelcome(e) {
     e.preventDefault();
-    const input = $('#welcome-name');
-    const name = input.value.trim();
-    if (!name) {
-      $('#welcome-error').hidden = false;
-      input.classList.add('invalid');
-      input.focus();
+    const btn = $('#welcome-submit');
+    if (isShared()) {
+      const user = $('#login-user').value.trim();
+      const pass = $('#login-pass').value;
+      if (!user) return welcomeError('Escribí tu usuario.', $('#login-user'));
+      if (!pass) return welcomeError('Escribí tu contraseña.', $('#login-pass'));
+      btn.disabled = true;
+      btn.textContent = 'Ingresando…';
+      try {
+        await store.signIn(user, pass);
+        const account = await store.getAccount();
+        $('#login-pass').value = '';
+        await openAccount(account, true);
+      } catch (err) {
+        console.error(err);
+        welcomeError(err.message === 'CREDENTIALS'
+          ? 'El usuario o la contraseña no son correctos. Revisalos y probá de nuevo.'
+          : 'No pudimos conectar. Revisá tu conexión a internet y probá de nuevo.', $('#login-pass'));
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Ingresar';
+      }
       return;
     }
+
+    const input = $('#welcome-name');
+    const name = input.value.trim();
+    if (!name) return welcomeError('Escribí tu nombre para comenzar.', input);
     try {
       state.tl = await store.findOrCreateTL(name);
+      await loadPeriods();
       await saveSession();
       if (location.hash && location.hash !== '#/') history.replaceState(null, '', '#/');
       await enterApp();
@@ -270,13 +348,37 @@
     }
   }
 
+  /* Abre el espacio que corresponde a la cuenta: TL, administración o sin habilitar. */
+  async function openAccount(account, greet) {
+    if (account && account.tl) {
+      state.tl = account.tl;
+      await loadPeriods();
+      if (greet && location.hash && location.hash !== '#/') history.replaceState(null, '', '#/');
+      await enterApp();
+      if (greet) toast(`¡Hola, ${state.tl.name.split(' ')[0]}!`);
+      return;
+    }
+    if (account && account.isAdmin) {
+      await loadPeriods();
+      return KGC.admin.open({ name: account.adminName || account.email, periods: state.periods, periodId: state.periodId });
+    }
+    await store.signOut();
+    showWelcome('Tu usuario todavía no está habilitado como Team Leader. Pedile a administración que lo active.');
+  }
+
   const saveSession = () => store.setSession({ tlId: state.tl.id, periodId: state.periodId });
 
   async function enterApp() {
     $('#screen-welcome').hidden = true;
+    $('#screen-admin').hidden = true;
     $('#screen-app').hidden = false;
     renderHeader();
-    await loadPeriod();
+    try {
+      await loadPeriod();
+    } catch (err) {
+      console.error(err);
+      toast('No pudimos traer tus datos. Revisá tu conexión y volvé a cargar la página.', 'error');
+    }
     await route();
     if (!state.currentAgentId) KGC.tour.startOnce();
   }
@@ -425,7 +527,7 @@
   }
 
   function renderPeriod() {
-    $('#period-switch').innerHTML = config.periods.map((p) => `
+    $('#period-switch').innerHTML = state.periods.map((p) => `
       <button type="button" class="period-btn" role="radio" aria-checked="${p.id === state.periodId}" data-act="period" data-id="${p.id}">
         <strong>${esc(p.label)}</strong>
       </button>`).join('');
@@ -709,7 +811,7 @@
     $('#btn-add-agent-top').hidden = agents.length === 0;
 
     if (!agents.length) {
-      const other = config.periods.find((p) => p.id !== state.periodId);
+      const other = state.periods.find((p) => p.id !== state.periodId);
       $('#agents').innerHTML = `
         <div class="empty">
           <strong>Todavía no agregaste agentes a tu equipo.</strong>
@@ -1368,10 +1470,7 @@
   /* ---------------- Eventos ---------------- */
   function bindGlobalEvents() {
     $('#welcome-form').addEventListener('submit', handleWelcome);
-    $('#welcome-name').addEventListener('input', () => {
-      $('#welcome-error').hidden = true;
-      $('#welcome-name').classList.remove('invalid');
-    });
+    $('#welcome-form').addEventListener('input', () => welcomeError(''));
 
     $('#agent-search').addEventListener('input', (e) => {
       state.search = e.target.value;
@@ -1435,6 +1534,6 @@
     document.addEventListener('visibilitychange', () => { if (document.hidden) flushFicha(); });
   }
 
-  KGC.app = { setTab };
+  KGC.app = { setTab, logout, toast, esc, initials, metric, ICONS };
   document.addEventListener('DOMContentLoaded', init);
 })();

@@ -141,3 +141,13 @@ drop policy if exists "actions: tl" on actions;
 create policy "actions: tl" on actions for all to authenticated using (tl_id = my_tl_id()) with check (tl_id = my_tl_id());
 drop policy if exists "actions: admin lee" on actions;
 create policy "actions: admin lee" on actions for select to authenticated using (is_admin());
+
+-- ---------- Permisos de acceso para la app ----------
+-- (Supabase no los da solos en los proyectos nuevos. Las reglas de arriba siguen
+--  limitando qué filas ve cada persona.)
+grant usage on schema public to anon, authenticated;
+grant select on periods to authenticated;
+grant select, update on team_leaders to authenticated;
+grant select on admins to authenticated;
+grant select, insert, update, delete on goals, agents, actions to authenticated;
+grant execute on function is_admin(), my_tl_id() to authenticated;

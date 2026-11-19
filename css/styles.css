@@ -184,7 +184,7 @@ svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width:
   min-width: 150px; padding: 14px 22px; border-radius: var(--radius);
   border: 2px solid var(--line); background: var(--white); cursor: pointer; text-align: left;
 }
-.period-btn strong { display: block; font-size: 20px; }
+.period-btn strong { display: block; font-size: 20px; white-space: nowrap; }
 .period-btn span { font-size: 13px; color: var(--muted); }
 .period-btn:hover { border-color: var(--green); }
 .period-btn[aria-checked="true"] { background: var(--green); border-color: var(--green); color: var(--white); }
@@ -298,6 +298,39 @@ svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width:
   background: var(--green); color: var(--white); font-style: normal; font-size: 11px; font-weight: 800;
   display: grid; place-items: center;
 }
+
+/* ---------- Ingreso ---------- */
+.login-fields { display: grid; gap: 10px; }
+.login-fields label { font-weight: 700; }
+.login-fields input { font-size: 18px; }
+.pass-wrap { position: relative; }
+.pass-wrap input { padding-right: 84px; }
+.pass-toggle {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  border: 0; background: var(--bg); border-radius: 999px; padding: 6px 12px; font-weight: 700; font-size: 14px; cursor: pointer;
+}
+#welcome-submit:disabled { opacity: .7; cursor: wait; }
+
+/* ---------- Administración ---------- */
+.admin-user { display: flex; align-items: center; gap: 10px; }
+.admin-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.admin-stats div { background: var(--bg); border-radius: var(--radius); padding: 16px; display: grid; gap: 4px; }
+.admin-stats b { font-size: 32px; line-height: 1; }
+.admin-stats span { font-size: 14px; color: var(--ink-2); font-weight: 700; }
+.admin-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; margin-top: 20px; }
+.admin-grid .section { margin-top: 0; }
+.admin-tl { display: grid; gap: 16px; align-content: start; }
+.admin-tl-head { display: flex; align-items: center; gap: 12px; }
+.admin-tl-head h3 { font-size: 19px; }
+.admin-metrics { display: grid; gap: 14px; }
+.admin-agents { border-top: 1px solid var(--line); padding-top: 10px; }
+.admin-agents summary { cursor: pointer; font-weight: 800; color: var(--green-dark); padding: 6px 0; }
+.admin-agents ul { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 8px; }
+.admin-agents li { background: var(--bg); border-radius: var(--radius-sm); padding: 10px 12px; display: grid; gap: 4px; }
+.admin-agent-name { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.admin-agent-name small { color: var(--muted); }
+.admin-agent-nums { display: flex; gap: 14px; flex-wrap: wrap; font-size: 14px; color: var(--ink-2); }
+.admin-agent-next { font-size: 13px; color: var(--ink-2); }
 
 /* ---------- Cómo empezar ---------- */
 .getting-started {
@@ -585,7 +618,7 @@ svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width:
 .field .opt { font-weight: 600; color: var(--muted); font-size: 13px; }
 .field-help { font-size: 13px; color: var(--muted); }
 .field-error { color: var(--red); font-size: 14px; font-weight: 700; }
-input[type="text"], input[type="search"], input[type="number"], input[type="date"], select, textarea {
+input[type="text"], input[type="password"], input[type="search"], input[type="number"], input[type="date"], select, textarea {
   width: 100%; min-height: 48px; padding: 10px 14px; border: 2px solid var(--line); border-radius: var(--radius-sm);
   background: var(--white); font-size: 16px;
 }
@@ -702,10 +735,15 @@ dialog::backdrop { background: rgba(37, 37, 37, .45); }
   .form-row-3 { grid-template-columns: 1fr; }
   .form-step { padding: 14px 12px; }
   .tabs { display: none; }
+  .admin-stats { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .admin-stats b { font-size: 26px; }
+  .admin-grid { grid-template-columns: 1fr; }
   .period-bar { gap: 10px; padding: 14px 16px; }
   .period-intro h2 { font-size: 16px; }
   .hello { font-size: 14px; }
-  .period-btn { padding: 10px 12px; text-align: center; }
+  .period-btn { padding: 10px 12px; text-align: center; flex: 1 0 auto; min-width: 104px; }
+  .period-switch { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin: 0 -4px; padding: 0 4px 2px; }
+  .period-switch::-webkit-scrollbar { display: none; }
   .period-btn strong { font-size: 17px; }
   .period-tools .btn { min-height: 38px; }
   #screen-app { padding-bottom: calc(78px + env(safe-area-inset-bottom)); }
