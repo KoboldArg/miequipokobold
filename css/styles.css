@@ -331,6 +331,38 @@ svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width:
 .admin-agent-name small { color: var(--muted); }
 .admin-agent-nums { display: flex; gap: 14px; flex-wrap: wrap; font-size: 14px; color: var(--ink-2); }
 .admin-agent-next { font-size: 13px; color: var(--ink-2); }
+.admin-gtk-warn { color: #A3122E; }
+
+/* ---------- Período: fechas y días que faltan ---------- */
+.period-dates { display: block; font-size: 13px; font-weight: 600; color: var(--muted); white-space: nowrap; }
+.period-btn[aria-checked="true"] .period-dates { color: rgba(255, 255, 255, .9); }
+.period-info { margin-top: 6px; font-size: 15px; color: var(--ink-2); }
+.period-info b { color: var(--green-dark); }
+.period-info.is-closing { color: var(--red); }
+.period-info.is-closing b { color: var(--red); }
+.period-info.is-past { color: var(--muted); }
+
+/* ---------- Plan GTK ---------- */
+.pill-gtk { background: var(--ink); color: var(--white); }
+.gtk-note { border-radius: var(--radius-sm); padding: 10px 12px; font-size: 14px; line-height: 1.4; }
+.gtk-info { background: var(--bg); color: var(--ink-2); }
+.gtk-warn { background: #FDE8EC; color: #A3122E; border-left: 4px solid var(--red); }
+.gtk-done { background: var(--green-soft); color: var(--green-dark); }
+.gtk-ended { background: #EDEDED; color: var(--muted); }
+.gtk-alerts {
+  background: #FDE8EC; border: 2px solid var(--red); border-radius: var(--radius-lg);
+  padding: 18px 22px; margin-top: 16px;
+}
+.gtk-alerts h2 { font-size: 18px; color: #A3122E; margin-bottom: 10px; }
+.gtk-alerts ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.gtk-alerts li {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;
+  background: var(--white); border-radius: var(--radius-sm); padding: 10px 12px;
+}
+.gtk-alerts li div { display: grid; }
+.gtk-alerts li span { font-size: 14px; color: var(--ink-2); }
+.ficha-gtk-card { grid-column: 1 / -1; gap: 12px; }
+.sched-with { font-size: 14px; color: var(--ink-2); background: #EEF5FC; border-radius: var(--radius-sm); padding: 8px 12px; }
 
 /* ---------- Cómo empezar ---------- */
 .getting-started {
@@ -735,6 +767,9 @@ dialog::backdrop { background: rgba(37, 37, 37, .45); }
   .form-row-3 { grid-template-columns: 1fr; }
   .form-step { padding: 14px 12px; }
   .tabs { display: none; }
+  .gtk-alerts { padding: 14px 14px; }
+  .gtk-alerts li .btn { width: 100%; }
+  .period-info { font-size: 14px; }
   .admin-stats { grid-template-columns: 1fr 1fr; gap: 8px; }
   .admin-stats b { font-size: 26px; }
   .admin-grid { grid-template-columns: 1fr; }

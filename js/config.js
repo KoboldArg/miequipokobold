@@ -15,9 +15,13 @@ KGC.config = {
 
   /* Períodos de respaldo (con Supabase, los períodos salen de la tabla "periods"). */
   periods: [
-    { id: 'P12-2026', label: 'P12 · 2026' },
-    { id: 'P13-2026', label: 'P13 · 2026' },
+    { id: 'P12-2026', label: 'P12 · 2026', start: '2026-11-02', end: '2026-11-29' },
+    { id: 'P13-2026', label: 'P13 · 2026', start: '2026-11-30', end: '2026-12-27' },
   ],
+
+  /* Plan GTK: dura 90 días desde la compra de la máquina y la meta es llegar a 6 ventas.
+   * Cuando faltan "warnDays" días o menos, la app avisa en rojo. */
+  gtk: { days: 90, sales: 6, warnDays: 30 },
 
   goalTypes: {
     ventas:        { label: 'Ventas',        color: '#00AC46', soft: '#E6F7ED', auto: true,  autoText: 'Se calcula con las ventas de tus agentes' },

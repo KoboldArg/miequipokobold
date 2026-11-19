@@ -66,6 +66,45 @@ KGC.calc = (function () {
     return goals.find((g) => g.type === type) || null;
   }
 
+  /* ---------- Fechas (formato AAAA-MM-DD) ---------- */
+  const DAY = 86400000;
+  const toDay = (iso) => {
+    if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return null;
+    const [y, m, d] = iso.split('-').map(Number);
+    return Date.UTC(y, m - 1, d) / DAY;
+  };
+  const fromDay = (day) => new Date(day * DAY).toISOString().slice(0, 10);
+  const today = () => {
+    const d = new Date();
+    return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / DAY;
+  };
+
+  /* Estado del período: cuántos días faltan para que termine. */
+  function periodStatus(period, now = today()) {
+    const start = toDay(period && period.start);
+    const end = toDay(period && period.end);
+    if (start == null || end == null) return null;
+    if (now < start) return { state: 'future', days: start - now };
+    if (now > end) return { state: 'past', days: now - end };
+    return { state: 'current', days: end - now };
+  }
+
+  /* Plan GTK: 90 días desde la compra, meta de 6 ventas. */
+  function gtkStatus(agent, now = today()) {
+    if (!agent || !agent.gtk) return null;
+    const { days, sales, warnDays } = KGC.config.gtk;
+    const start = toDay(agent.purchaseDate);
+    const salesLeft = Math.max(sales - n(agent.gtkSales), 0);
+    if (start == null) return { noDate: true, salesLeft };
+    const end = start + days;
+    const daysLeft = end - now;
+    let level = 'ok';
+    if (salesLeft === 0) level = 'done';
+    else if (daysLeft < 0) level = 'ended';
+    else if (daysLeft <= warnDays) level = 'warn';
+    return { endDate: fromDay(end), daysLeft, salesLeft, level };
+  }
+
   /* Situación de una agente: se mide por su objetivo de ventas;
    * si no tiene objetivo de ventas pero sí de demos, se mide por demos. */
   function agentSituation(agent) {
@@ -86,5 +125,5 @@ KGC.calc = (function () {
     return { key: 'rojo', label: 'Necesita intervención', color: '#F0415F', order: 4 };
   }
 
-  return { n, hasTarget, percent, pending, barWidth, teamTotals, levelColor, UNIQUE_TYPES, isAuto, goalAchieved, findGoal, agentSituation };
+  return { periodStatus, gtkStatus, n, hasTarget, percent, pending, barWidth, teamTotals, levelColor, UNIQUE_TYPES, isAuto, goalAchieved, findGoal, agentSituation };
 })();

@@ -18,11 +18,12 @@ KGC.createSupabaseStore = function createSupabaseStore(cfg) {
       demosTarget: 'demos_target', demosDone: 'demos_done', demosScheduled: 'demos_scheduled',
       personalGoal: 'personal_goal', needs: 'needs', nextAction: 'next_action',
       followUpDate: 'follow_up_date', notes: 'notes',
+      demosScheduledWith: 'demos_scheduled_with', gtk: 'gtk', purchaseDate: 'purchase_date', gtkSales: 'gtk_sales',
     },
     actions: { agentId: 'agent_id', topic: 'topic', nextAction: 'next_action', date: 'date', status: 'status' },
   };
   /* Campos que en la app son '' y en la base son null. */
-  const EMPTY_AS_NULL = new Set(['follow_up_date', 'date', 'agent_id']);
+  const EMPTY_AS_NULL = new Set(['follow_up_date', 'date', 'agent_id', 'purchase_date']);
 
   function toDb(coll, obj) {
     const out = {};
@@ -98,8 +99,10 @@ KGC.createSupabaseStore = function createSupabaseStore(cfg) {
     },
 
     async getPeriods() {
-      const rows = check(await client.from('periods').select('id, label, sort_order, active').eq('active', true).order('sort_order'));
-      return rows.map((p) => ({ id: p.id, label: p.label }));
+      const rows = check(await client.from('periods').select('*').eq('active', true).order('sort_order'));
+      /* Si la base todavía no tiene las fechas, se toman de la configuración. */
+      const local = (id) => (KGC.config.periods.find((p) => p.id === id) || {});
+      return rows.map((p) => ({ id: p.id, label: p.label, start: p.start_date || local(p.id).start || '', end: p.end_date || local(p.id).end || '' }));
     },
 
     /* ---------- Compatibilidad con la interfaz local ---------- */

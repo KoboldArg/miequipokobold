@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/styles.css?v=18">
+  <link rel="stylesheet" href="css/styles.css?v=20">
 </head>
 <body>
 
@@ -109,6 +109,7 @@
           <div class="period-intro">
             <p class="hello" id="hello"></p>
             <h2 id="period-title">¿Qué período querés revisar?</h2>
+            <p class="period-info" id="period-info" hidden></p>
           </div>
           <div class="period-switch" id="period-switch" role="radiogroup" aria-label="Período"></div>
           <div class="period-tools">
@@ -137,6 +138,7 @@
 
         <!-- ===== Pestaña 1: Resumen ===== -->
         <div class="tab-panel" id="panel-resumen" role="tabpanel" aria-labelledby="tab-resumen">
+          <section class="gtk-alerts" id="gtk-alerts" hidden></section>
           <section class="section sec-summary" id="sec-summary" aria-labelledby="summary-title">
             <div class="section-head">
               <div class="sec-title">
@@ -254,13 +256,13 @@
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-  <script src="js/config.js?v=18"></script>
-  <script src="js/storage.js?v=18"></script>
+  <script src="js/config.js?v=20"></script>
+  <script src="js/storage.js?v=20"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
-  <script src="js/supabase-store.js?v=18"></script>
-  <script src="js/calc.js?v=18"></script>
-  <script src="js/tour.js?v=18"></script>
-  <script src="js/app.js?v=18"></script>
-  <script src="js/admin.js?v=18"></script>
+  <script src="js/supabase-store.js?v=20"></script>
+  <script src="js/calc.js?v=20"></script>
+  <script src="js/tour.js?v=20"></script>
+  <script src="js/app.js?v=20"></script>
+  <script src="js/admin.js?v=20"></script>
 </body>
 </html>

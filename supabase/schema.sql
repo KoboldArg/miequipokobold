@@ -151,3 +151,15 @@ grant select, update on team_leaders to authenticated;
 grant select on admins to authenticated;
 grant select, insert, update, delete on goals, agents, actions to authenticated;
 grant execute on function is_admin(), my_tl_id() to authenticated;
+
+-- ---------- Agregados (también en migracion-2.sql) ----------
+
+alter table periods add column if not exists start_date date;
+alter table periods add column if not exists end_date date;
+update periods set start_date = '2026-11-02', end_date = '2026-11-29' where id = 'P12-2026';
+update periods set start_date = '2026-11-30', end_date = '2026-12-27' where id = 'P13-2026';
+
+alter table agents add column if not exists demos_scheduled_with text not null default '';
+alter table agents add column if not exists gtk boolean not null default false;
+alter table agents add column if not exists purchase_date date;
+alter table agents add column if not exists gtk_sales integer not null default 0 check (gtk_sales >= 0);

@@ -4,6 +4,7 @@
 
   const { config, calc, store } = KGC;
   const { n } = calc;
+  const GTK = config.gtk;
 
   /* ---------------- Estado ---------------- */
   const state = {
@@ -35,6 +36,28 @@
     const [y, m, d] = iso.split('-');
     return `${d}/${m}/${y}`;
   };
+  const fmtShort = (iso) => {
+    if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return '';
+    const [, m, d] = iso.split('-');
+    return `${Number(d)}/${Number(m)}`;
+  };
+  const daysText = (d) => (d === 0 ? 'hoy' : d === 1 ? '1 día' : `${d} días`);
+
+  /* Aviso del plan GTK (tarjeta, ficha y resumen). */
+  function gtkNotice(a, detailed) {
+    const st = calc.gtkStatus(a);
+    if (!st) return '';
+    if (st.noDate) return '<div class="gtk-note gtk-info"><b>Plan GTK:</b> falta cargar la fecha de compra de la máquina.</div>';
+    const ventas = (k) => `${k} ${k === 1 ? 'venta' : 'ventas'}`;
+    if (st.level === 'done') return `<div class="gtk-note gtk-done"><b>Plan GTK cumplido:</b> llegó a ${GTK.sales} ventas.</div>`;
+    if (st.level === 'ended') return `<div class="gtk-note gtk-ended"><b>Plan GTK terminado</b> el ${fmtDate(st.endDate)}. Quedó en ${n(a.gtkSales)} de ${GTK.sales} ventas.</div>`;
+    const when = st.daysLeft === 0 ? 'termina hoy' : `termina en ${daysText(st.daysLeft)}`;
+    if (st.level === 'warn') {
+      return `<div class="gtk-note gtk-warn"><b>¡Plan GTK ${when}!</b> (${fmtShort(st.endDate)}) Le ${st.salesLeft === 1 ? 'falta' : 'faltan'} ${ventas(st.salesLeft)} para llegar a ${GTK.sales}.${detailed ? ' Conviene darle un seguimiento extra.' : ''}</div>`;
+    }
+    return `<div class="gtk-note gtk-info"><b>Plan GTK:</b> ${when} (${fmtShort(st.endDate)}). Lleva ${n(a.gtkSales)} de ${GTK.sales} ventas.</div>`;
+  }
+
   /* '' → null (sin dato) ; número → entero ≥ 0 */
   const intOrNull = (v) => (v === '' || v == null ? null : n(v));
   const agentName = (id) => {
@@ -174,6 +197,10 @@
     const x = Object.assign({}, a);
     if (x.demosTarget === undefined) x.demosTarget = x.demosPlanned == null ? null : n(x.demosPlanned);
     if (x.demosScheduled === undefined) x.demosScheduled = 0;
+    if (x.demosScheduledWith == null) x.demosScheduledWith = '';
+    x.gtk = !!x.gtk;
+    if (x.purchaseDate == null) x.purchaseDate = '';
+    if (x.gtkSales == null) x.gtkSales = 0;
     delete x.demosPlanned;
     return x;
   }
@@ -530,7 +557,22 @@
     $('#period-switch').innerHTML = state.periods.map((p) => `
       <button type="button" class="period-btn" role="radio" aria-checked="${p.id === state.periodId}" data-act="period" data-id="${p.id}">
         <strong>${esc(p.label)}</strong>
+        ${p.start && p.end ? `<span class="period-dates">${fmtShort(p.start)} al ${fmtShort(p.end)}</span>` : ''}
       </button>`).join('');
+    const cur = state.periods.find((p) => p.id === state.periodId);
+    const st = calc.periodStatus(cur);
+    const info = $('#period-info');
+    info.hidden = !st;
+    if (st) {
+      info.className = `period-info is-${st.state}${st.state === 'current' && st.days <= 7 ? ' is-closing' : ''}`;
+      info.innerHTML = st.state === 'current'
+        ? (st.days === 0
+          ? `<b>Hoy cierra ${esc(cur.label)}.</b> Último día para llegar a los objetivos.`
+          : `Faltan <b>${daysText(st.days)}</b> para el cierre de ${esc(cur.label)} (${fmtShort(cur.end)}).`)
+        : st.state === 'future'
+          ? `${esc(cur.label)} empieza el ${fmtShort(cur.start)} (en ${daysText(st.days)}).`
+          : `${esc(cur.label)} terminó el ${fmtShort(cur.end)}.`;
+    }
   }
 
   async function changePeriod(id) {
@@ -589,7 +631,27 @@
       </button>`).join('')}</div>`;
   }
 
+  function renderGtkAlerts() {
+    const box = $('#gtk-alerts');
+    const list = state.data.agents
+      .filter((a) => a.status !== 'inactiva')
+      .map((a) => ({ a, st: calc.gtkStatus(a) }))
+      .filter((x) => x.st && x.st.level === 'warn')
+      .sort((x, y) => x.st.daysLeft - y.st.daysLeft);
+    box.hidden = !list.length;
+    box.innerHTML = list.length ? `
+      <h2>Planes GTK por terminar</h2>
+      <ul>
+        ${list.map(({ a, st }) => `
+          <li>
+            <div><b>${esc(a.name)}</b><span>${st.daysLeft === 0 ? 'Termina hoy' : `Termina en ${daysText(st.daysLeft)}`} (${fmtShort(st.endDate)}) · le ${st.salesLeft === 1 ? 'falta' : 'faltan'} ${st.salesLeft} ${st.salesLeft === 1 ? 'venta' : 'ventas'}</span></div>
+            <button class="btn btn-outline btn-sm" data-act="view-agent" data-id="${a.id}">Ver ficha</button>
+          </li>`).join('')}
+      </ul>` : '';
+  }
+
   function renderGoals() {
+    renderGtkAlerts();
     const { goals, agents } = state.data;
     const t = calc.teamTotals(agents);
     $('#team-size').textContent = t.count
@@ -861,13 +923,13 @@
     if (!other.agents.length) return;
     const ok = await confirmDialog({
       title: `¿Traer tus agentes de ${periodLabel(fromId)}?`,
-      message: `Se van a copiar ${other.agents.length} ${other.agents.length === 1 ? 'agente' : 'agentes'} con su nombre y estado. Los objetivos, demos y ventas empiezan en cero para ${periodLabel()}.`,
+      message: `Se van a copiar ${other.agents.length} ${other.agents.length === 1 ? 'agente' : 'agentes'} con su nombre, estado y plan GTK. Los objetivos, demos y ventas del período empiezan en cero para ${periodLabel()}.`,
       confirmLabel: 'Sí, traerlas',
     });
     if (!ok) return;
     mutate(async () => {
       for (const a of other.agents.slice().sort(byName)) {
-        await create('agents', emptyAgent({ name: a.name, status: a.status }));
+        await create('agents', emptyAgent({ name: a.name, status: a.status, gtk: !!a.gtk, purchaseDate: a.purchaseDate || '', gtkSales: n(a.gtkSales) }));
       }
     }, 'Agentes agregadas a este período');
   }
@@ -876,7 +938,8 @@
     return Object.assign({
       name: '', status: 'activa', personalGoal: '',
       target: null, sales: 0,
-      demosTarget: null, demosDone: 0, demosScheduled: 0,
+      demosTarget: null, demosDone: 0, demosScheduled: 0, demosScheduledWith: '',
+      gtk: false, purchaseDate: '', gtkSales: 0,
       notes: '', needs: '', nextAction: '', followUpDate: '',
     }, extra);
   }
@@ -895,11 +958,14 @@
             <h3>${esc(a.name)}</h3>
             <div class="meta">
               ${inactive ? '<span class="pill pill-inactive">Inactiva</span>' : `<span class="pill"><span class="dot" style="--dot:${sit.color}"></span>${sit.label}</span>`}
+              ${a.gtk ? '<span class="pill pill-gtk">Plan GTK</span>' : ''}
             </div>
           </div>
         </div>
+        ${gtkNotice(a)}
         ${metric({ label: 'Ventas', done: a.sales, target: a.target, unit: 'ventas', color: SALES_COLOR })}
         ${metric({ label: 'Demos', done: a.demosDone, target: a.demosTarget, scheduled: a.demosScheduled, unit: 'demos', color: DEMOS_COLOR })}
+        ${n(a.demosScheduled) && a.demosScheduledWith ? `<p class="sched-with"><b>Agendadas con:</b> ${esc(a.demosScheduledWith)}</p>` : ''}
         ${a.nextAction ? `<div class="next-action"><b>Próxima acción</b>${esc(a.nextAction)}${a.followUpDate ? ` · ${fmtDate(a.followUpDate)}` : ''}</div>` : ''}
         <div class="agent-foot">
           <button class="btn btn-primary btn-sm" data-act="edit-agent" data-id="${a.id}">${ICONS.edit} Actualizar datos</button>
@@ -927,6 +993,14 @@
               <span class="field-label">Estado</span>
               ${choiceGroup('status', [{ value: 'activa', label: 'Activa' }, { value: 'inactiva', label: 'Inactiva', color: '#707070' }], a.status)}
             </div>
+            <label class="toggle">
+              <input type="checkbox" name="gtk" ${a.gtk ? 'checked' : ''}>
+              <span><b>Está en plan GTK</b> (${GTK.days} días desde la compra de la máquina para llegar a ${GTK.sales} ventas)</span>
+            </label>
+            <div class="form-row-2" id="gtk-wrap">
+              ${textField('purchaseDate', 'Fecha de compra de la máquina', a.purchaseDate, { type: 'date' })}
+              ${stepperField('gtkSales', `Ventas en el plan (de ${GTK.sales})`, n(a.gtkSales))}
+            </div>
           </section>
 
           <section class="form-step">
@@ -945,7 +1019,10 @@
               ${stepperField('sales', 'Ventas hechas', n(a.sales))}
               ${stepperField('demosDone', 'Demos hechas', n(a.demosDone))}
               ${stepperField('demosScheduled', 'Demos agendadas', n(a.demosScheduled))}
-              <div class="convert-cell"><button type="button" class="btn btn-soft btn-sm btn-convert" id="btn-convert">✓ Se hizo una demo agendada</button></div>
+            </div>
+            <div class="field" id="sched-with-wrap">
+              <label for="f-demosScheduledWith">¿Con quién son las demos agendadas?</label>
+              <textarea id="f-demosScheduledWith" name="demosScheduledWith" maxlength="1000" placeholder="Ej.: Marta López (jueves 21), familia Díaz (sábado)">${esc(a.demosScheduledWith || '')}</textarea>
             </div>
           </section>
 
@@ -962,14 +1039,12 @@
         </div>`,
       onOpen: (form) => {
         const el = form.elements;
-        const sync = () => { $('#btn-convert', form).hidden = n(el.demosScheduled.value) === 0; };
+        const sync = () => {
+          $('#sched-with-wrap', form).hidden = n(el.demosScheduled.value) === 0 && !el.demosScheduledWith.value.trim();
+          $('#gtk-wrap', form).hidden = !el.gtk.checked;
+        };
         form.oninput = sync;
-        $('#btn-convert', form).addEventListener('click', () => {
-          if (n(el.demosScheduled.value) === 0) return;
-          el.demosScheduled.value = n(el.demosScheduled.value) - 1;
-          el.demosDone.value = n(el.demosDone.value) + 1;
-          sync();
-        });
+        form.onchange = sync;
         sync();
       },
       onSubmit: async (form) => {
@@ -985,6 +1060,10 @@
           sales: n(el.sales.value),
           demosDone: n(el.demosDone.value),
           demosScheduled: n(el.demosScheduled.value),
+          demosScheduledWith: el.demosScheduledWith.value.trim(),
+          gtk: el.gtk.checked,
+          purchaseDate: el.gtk.checked ? el.purchaseDate.value : '',
+          gtkSales: el.gtk.checked ? n(el.gtkSales.value) : 0,
           personalGoal: el.personalGoal.value.trim(),
           needs: el.needs.value.trim(),
           nextAction: el.nextAction.value.trim(),
@@ -1237,6 +1316,21 @@
       </div>
 
       <div class="ficha-grid">
+        <section class="ficha-card ficha-gtk-card">
+          <label class="toggle toggle-sm">
+            <input type="checkbox" data-field="gtk" ${a.gtk ? 'checked' : ''}>
+            <span><b>Está en plan GTK</b> (${GTK.days} días desde la compra para llegar a ${GTK.sales} ventas)</span>
+          </label>
+          <div class="form-row-2" id="ficha-gtk-fields" ${a.gtk ? '' : 'hidden'}>
+            <div class="field">
+              <label for="ff-purchaseDate">Fecha de compra de la máquina</label>
+              <input id="ff-purchaseDate" type="date" data-field="purchaseDate" value="${esc(a.purchaseDate || '')}">
+            </div>
+            ${fichaStepper('gtkSales', `Ventas en el plan (de ${GTK.sales})`, n(a.gtkSales))}
+          </div>
+          <div id="ficha-gtk"></div>
+        </section>
+
         <section class="ficha-card">
           <h2><span class="num">1</span>Su objetivo</h2>
           ${fichaText('personalGoal', '¿Qué quiere conseguir? (incentivo, meta personal)', a.personalGoal, true, 'Ej.: llegar a 4 ventas para el incentivo del período')}
@@ -1253,7 +1347,7 @@
             ${fichaStepper('demosDone', 'Demos hechas', n(a.demosDone))}
             ${fichaStepper('demosScheduled', 'Demos agendadas', n(a.demosScheduled))}
           </div>
-          <button type="button" class="btn btn-soft btn-sm btn-convert" data-act="ficha-convert" id="ficha-convert">✓ Se hizo una demo agendada</button>
+          ${fichaText('demosScheduledWith', '¿Con quién son las demos agendadas?', a.demosScheduledWith, true, 'Ej.: Marta López (jueves 21), familia Díaz (sábado)')}
           <div id="ficha-demos"></div>
         </section>
 
@@ -1295,17 +1389,6 @@
     renderFichaActions(a);
   }
 
-  /* Pasa una demo de "agendada" a "hecha" en la ficha. */
-  function fichaConvert() {
-    const sched = $('#ff-demosScheduled');
-    const done = $('#ff-demosDone');
-    if (!sched || !done || n(sched.value) === 0) return;
-    sched.value = n(sched.value) - 1;
-    done.value = n(done.value) + 1;
-    [sched, done].forEach((el) => el.dispatchEvent(new Event('change', { bubbles: true })));
-    toast('Demo pasada a hecha');
-  }
-
   function fichaStepper(field, label, value, placeholder) {
     return `
       <div class="field">
@@ -1331,7 +1414,8 @@
   function fichaValue(el) {
     const f = el.dataset.field;
     if (['target', 'demosTarget'].includes(f)) return intOrNull(el.value);
-    if (['demosDone', 'demosScheduled', 'sales'].includes(f)) return n(el.value);
+    if (['demosDone', 'demosScheduled', 'sales', 'gtkSales'].includes(f)) return n(el.value);
+    if (f === 'gtk') return el.checked;
     if (f === 'name') return el.value.trim().replace(/\s+/g, ' ');
     if (f === 'status') return el.value === 'inactiva' ? 'inactiva' : 'activa';
     return el.type === 'date' ? el.value : el.value.trim();
@@ -1405,8 +1489,10 @@
         ? metric({ label: 'Avance de ventas', done: a.sales, target: a.target, unit: 'ventas', color: SALES_COLOR })
         : '<span>Definí su objetivo de ventas en "Su objetivo" para ver el avance.</span>'}</div>`;
     }
-    const conv = $('#ficha-convert');
-    if (conv) conv.hidden = n(a.demosScheduled) === 0;
+    const gtkBox = $('#ficha-gtk');
+    if (gtkBox) gtkBox.innerHTML = gtkNotice(a, true);
+    const gtkFields = $('#ficha-gtk-fields');
+    if (gtkFields) gtkFields.hidden = !a.gtk;
     const demosBox = $('#ficha-demos');
     if (demosBox) {
       const sched = n(a.demosScheduled);
@@ -1433,6 +1519,14 @@
   }
 
   /* ---------------- Imprimir resumen ---------------- */
+  function gtkPrint(a) {
+    const g = calc.gtkStatus(a);
+    if (!g) return '–';
+    if (g.noDate) return 'Sin fecha';
+    const estado = g.level === 'ended' ? 'terminó' : g.level === 'done' ? 'cumplido' : `cierra ${fmtShort(g.endDate)}`;
+    return `${n(a.gtkSales)}/${GTK.sales} · ${estado}`;
+  }
+
   function printSummary() {
     const { goals, agents, actions } = state.data;
     const totals = calc.teamTotals(agents);
@@ -1455,9 +1549,9 @@
         }).join('')}</tbody></table>` : '<p class="pr-empty">Sin objetivos cargados.</p>'}
 
       <h2>Mi equipo, agente por agente</h2>
-      ${agents.length ? `<table><thead><tr><th>Agente</th><th>Estado</th><th>Ventas (hechas / objetivo)</th><th>Demos (hechas / objetivo)</th><th>Demos agendadas</th><th>Situación</th><th>Próxima acción</th></tr></thead><tbody>
+      ${agents.length ? `<table><thead><tr><th>Agente</th><th>Estado</th><th>Ventas (hechas / objetivo)</th><th>Demos (hechas / objetivo)</th><th>Demos agendadas</th><th>Plan GTK</th><th>Situación</th><th>Próxima acción</th></tr></thead><tbody>
         ${agents.map((a) => {
-          return `<tr><td>${esc(a.name)}</td><td>${a.status === 'inactiva' ? 'Inactiva' : 'Activa'}</td><td>${fmtGoal(a.sales, a.target)}</td><td>${fmtGoal(a.demosDone, a.demosTarget)}</td><td>${n(a.demosScheduled)}</td><td>${esc(calc.agentSituation(a).label)}</td><td>${esc(a.nextAction)}${a.followUpDate ? ` (${fmtDate(a.followUpDate)})` : ''}</td></tr>`;
+          return `<tr><td>${esc(a.name)}</td><td>${a.status === 'inactiva' ? 'Inactiva' : 'Activa'}</td><td>${fmtGoal(a.sales, a.target)}</td><td>${fmtGoal(a.demosDone, a.demosTarget)}</td><td>${n(a.demosScheduled)}${a.demosScheduledWith ? ` (${esc(a.demosScheduledWith)})` : ''}</td><td>${gtkPrint(a)}</td><td>${esc(calc.agentSituation(a).label)}</td><td>${esc(a.nextAction)}${a.followUpDate ? ` (${fmtDate(a.followUpDate)})` : ''}</td></tr>`;
         }).join('')}</tbody></table>` : '<p class="pr-empty">Sin agentes cargadas.</p>'}
 
       <h2>Mi seguimiento (acciones por hacer)</h2>
@@ -1508,7 +1602,6 @@
         case 'tour': if (state.currentAgentId) { location.hash = '#/'; setTimeout(KGC.tour.start, 300); } else KGC.tour.start(); break;
         case 'tab': setTab(el.dataset.tab); break;
         case 'goal-step': stepGoal(id, Number(el.dataset.delta)); break;
-        case 'ficha-convert': fichaConvert(); break;
         case 'add-goal': goalForm(null, el.dataset.type); break;
         case 'edit-goal': goalForm(state.data.goals.find((g) => g.id === id)); break;
         case 'delete-goal': deleteGoal(id); break;

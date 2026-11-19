@@ -13,6 +13,7 @@ KGC.admin = (function () {
   const app = () => KGC.app;
   const esc = (s) => app().esc(s);
   const periodLabel = (id = ctx.periodId) => (ctx.periods.find((p) => p.id === id) || {}).label || id;
+  const fmtShort = (iso) => (iso && /^\d{4}-\d{2}-\d{2}$/.test(iso) ? `${Number(iso.slice(8))}/${Number(iso.slice(5, 7))}` : '');
   const goalTitle = (g, fallback) => (g.description && g.description.trim() ? g.description : fallback);
 
   function open({ name, periods, periodId }) {
@@ -43,6 +44,7 @@ KGC.admin = (function () {
     $('#admin-period-switch').innerHTML = ctx.periods.map((p) => `
       <button type="button" class="period-btn" role="radio" aria-checked="${p.id === ctx.periodId}" data-admin-period="${p.id}">
         <strong>${esc(p.label)}</strong>
+        ${p.start && p.end ? `<span class="period-dates">${fmtShort(p.start)} al ${fmtShort(p.end)}</span>` : ''}
       </button>`).join('');
     $('#admin-totals').innerHTML = '<p class="section-sub">Cargando…</p>';
     $('#admin-tls').innerHTML = '';
@@ -133,12 +135,24 @@ KGC.admin = (function () {
                         <span>Ventas <b>${fmt(a.sales, a.target)}</b></span>
                         <span>Demos <b>${fmt(a.demosDone, a.demosTarget)}</b>${n(a.demosScheduled) ? ` · ${n(a.demosScheduled)} agend.` : ''}</span>
                       </div>
+                      ${gtkLine(a)}
                       ${a.nextAction ? `<p class="admin-agent-next">Próxima acción: ${esc(a.nextAction)}</p>` : ''}
                     </li>`;
                 }).join('')}
               </ul>
             </details>` : ''}`}
       </article>`;
+  }
+
+  function gtkLine(a) {
+    const g = calc.gtkStatus(a);
+    if (!g) return '';
+    const total = KGC.config.gtk.sales;
+    if (g.noDate) return '<p class="admin-agent-next"><b>Plan GTK</b> · sin fecha de compra</p>';
+    if (g.level === 'done') return `<p class="admin-agent-next"><b>Plan GTK</b> · cumplido (${total} ventas)</p>`;
+    if (g.level === 'ended') return `<p class="admin-agent-next"><b>Plan GTK</b> · terminó con ${n(a.gtkSales)} de ${total}</p>`;
+    const cls = g.level === 'warn' ? ' admin-gtk-warn' : '';
+    return `<p class="admin-agent-next${cls}"><b>Plan GTK</b> · ${n(a.gtkSales)} de ${total} ventas · cierra el ${fmtShort(g.endDate)} (${g.daysLeft} días)</p>`;
   }
 
   return { open };
