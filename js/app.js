@@ -200,6 +200,75 @@
       agents: d.agents.map(normalizeAgent).sort(byName),
       actions: d.actions.map((x) => Object.assign({}, x, { date: fixDate(x.date) })),
     };
+    state.prevAgents = [];
+    const prev = prevPeriod();
+    if (prev) {
+      try {
+        const p = await store.getPeriod(state.tl.id, prev.id);
+        state.prevAgents = p.agents.map(normalizeAgent).sort(byName);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+  }
+
+  /* Período anterior (según el orden de los períodos). Las agentes pasan de ese al actual. */
+  function prevPeriod() {
+    const i = state.periods.findIndex((p) => p.id === state.periodId);
+    return i > 0 ? state.periods[i - 1] : null;
+  }
+
+  /* Agentes del período anterior que todavía no están en este (por nombre). */
+  function missingAgents() {
+    const here = new Set(state.data.agents.map((a) => fold(a.name)));
+    return (state.prevAgents || []).filter((a) => !here.has(fold(a.name)));
+  }
+
+  /* Qué pasa de una agente al período siguiente: sus datos y su seguimiento.
+   * Empiezan de cero los objetivos individuales y lo hecho (ventas y demos). */
+  function carryAgent(a) {
+    return emptyAgent({
+      name: a.name,
+      status: a.status,
+      gtk: !!a.gtk,
+      purchaseDate: a.purchaseDate || '',
+      gtkSales: n(a.gtkSales),
+      demosScheduled: n(a.demosScheduled),
+      demosScheduledWith: a.demosScheduledWith || '',
+      personalGoal: a.personalGoal || '',
+      needs: a.needs || '',
+      notes: a.notes || '',
+      nextAction: a.nextAction || '',
+      followUpDate: a.followUpDate || '',
+    });
+  }
+
+  async function copyAgents(list) {
+    for (const a of list.slice().sort(byName)) {
+      const data = carryAgent(a);
+      const saved = await create('agents', data);
+      if (data.nextAction) await syncAgentAction(saved.id, '', data.nextAction, data.followUpDate);
+    }
+  }
+
+  /* La primera vez que se abre un período vacío, se traen solas las agentes del anterior. */
+  async function autoCarry() {
+    if (state.data.agents.length || !(state.prevAgents || []).length) return false;
+    const key = `kobold-gc:v1:carried:${state.tl.id}:${state.periodId}`;
+    try { if (localStorage.getItem(key)) return false; } catch (e) { /* sin acceso */ }
+    const prev = prevPeriod();
+    try {
+      await copyAgents(state.prevAgents);
+      try { localStorage.setItem(key, '1'); } catch (e) { /* sin acceso */ }
+      await loadPeriod();
+      const k = state.data.agents.length;
+      toast(`Trajimos tus ${k} ${k === 1 ? 'agente' : 'agentes'} de ${prev.label}. Sus ventas y demos empiezan en cero.`);
+      return true;
+    } catch (err) {
+      console.error(err);
+      toast('No pudimos traer tus agentes del período anterior. Probá de nuevo.', 'error');
+      return false;
+    }
   }
 
   /* Compatibilidad con la versión anterior: "demos planificadas" pasa a ser el objetivo de demos. */
@@ -413,6 +482,7 @@
     renderHeader();
     try {
       await loadPeriod();
+      await autoCarry();
     } catch (err) {
       console.error(err);
       toast('No pudimos traer tus datos. Revisá tu conexión y volvé a cargar la página.', 'error');
@@ -594,8 +664,9 @@
     state.statusFilter = 'todas';
     await saveSession();
     await loadPeriod();
+    const carried = await autoCarry();
     renderDashboard();
-    toast(`Estás viendo ${periodLabel()}`);
+    if (!carried) toast(`Estás viendo ${periodLabel()}`);
   }
 
   /* ----- Objetivos del equipo ----- */
@@ -883,18 +954,18 @@
     $('#agents-toolbar').hidden = !showTools;
     $('#btn-add-agent-top').hidden = agents.length === 0;
 
+    const prev = prevPeriod();
+    const missing = missingAgents();
     if (!agents.length) {
-      const other = state.periods.find((p) => p.id !== state.periodId);
       $('#agents').innerHTML = `
         <div class="empty">
           <strong>Todavía no agregaste agentes a tu equipo.</strong>
           <p>Comenzá agregando a tu primera agente.</p>
           <div class="btn-row">
             <button class="btn btn-primary" data-act="add-agent">+ Agregar agente</button>
-            ${other ? `<button class="btn btn-outline" data-act="import-agents" data-from="${other.id}" hidden id="btn-import">Traer mis agentes de ${esc(other.label)}</button>` : ''}
+            ${missing.length ? `<button class="btn btn-outline" data-act="import-agents">Traer mis ${missing.length} ${missing.length === 1 ? 'agente' : 'agentes'} de ${esc(prev.label)}</button>` : ''}
           </div>
         </div>`;
-      if (other) maybeShowImport(other.id);
       return;
     }
     if (!showTools) { state.search = ''; state.statusFilter = 'todas'; $('#agent-search').value = ''; }
@@ -917,32 +988,25 @@
         </div>`;
       return;
     }
-    $('#agents').innerHTML = `<div class="agents-grid">${list.map(agentCard).join('')}</div>`;
+    const missingBar = missing.length ? `
+      <div class="carry-bar">
+        <p>${missing.length === 1 ? 'Hay 1 agente' : `Hay ${missing.length} agentes`} de ${esc(prev.label)} que no ${missing.length === 1 ? 'está' : 'están'} en este período: <b>${missing.slice(0, 4).map((a) => esc(a.name)).join(', ')}${missing.length > 4 ? '…' : ''}</b></p>
+        <button class="btn btn-outline btn-sm" data-act="import-agents">Traer ${missing.length === 1 ? 'a esa agente' : `a las ${missing.length}`}</button>
+      </div>` : '';
+    $('#agents').innerHTML = `${missingBar}<div class="agents-grid">${list.map(agentCard).join('')}</div>`;
   }
 
-  async function maybeShowImport(fromId) {
-    const other = await store.getPeriod(state.tl.id, fromId);
-    const btn = $('#btn-import');
-    if (btn && other.agents.length && !state.data.agents.length) {
-      btn.hidden = false;
-      btn.textContent = `Traer mis ${other.agents.length} ${other.agents.length === 1 ? 'agente' : 'agentes'} de ${periodLabel(fromId)}`;
-    }
-  }
-
-  async function importAgents(fromId) {
-    const other = await store.getPeriod(state.tl.id, fromId);
-    if (!other.agents.length) return;
+  async function importAgents() {
+    const list = missingAgents();
+    const prev = prevPeriod();
+    if (!list.length || !prev) return;
     const ok = await confirmDialog({
-      title: `¿Traer tus agentes de ${periodLabel(fromId)}?`,
-      message: `Se van a copiar ${other.agents.length} ${other.agents.length === 1 ? 'agente' : 'agentes'} con su nombre, estado y plan GTK. Los objetivos, demos y ventas del período empiezan en cero para ${periodLabel()}.`,
+      title: `¿Traer ${list.length === 1 ? 'a esta agente' : `estas ${list.length} agentes`} de ${prev.label}?`,
+      message: `Se copian con su estado, plan GTK, seguimiento y demos agendadas. Las ventas, las demos hechas y los objetivos individuales empiezan en cero en ${periodLabel()}.`,
       confirmLabel: 'Sí, traerlas',
     });
     if (!ok) return;
-    mutate(async () => {
-      for (const a of other.agents.slice().sort(byName)) {
-        await create('agents', emptyAgent({ name: a.name, status: a.status, gtk: !!a.gtk, purchaseDate: a.purchaseDate || '', gtkSales: n(a.gtkSales) }));
-      }
-    }, 'Agentes agregadas a este período');
+    mutate(() => copyAgents(list), list.length === 1 ? 'Agente agregada a este período' : 'Agentes agregadas a este período');
   }
 
   function emptyAgent(extra) {
@@ -1676,7 +1740,7 @@
 
         case 'delete-agent': deleteAgent(id); break;
         case 'view-agent': location.hash = `#/agente/${encodeURIComponent(id)}`; break;
-        case 'import-agents': importAgents(el.dataset.from); break;
+        case 'import-agents': importAgents(); break;
         case 'filter-status': state.statusFilter = el.dataset.value; renderAgents(); break;
         case 'clear-filters': state.statusFilter = 'todas'; state.search = ''; $('#agent-search').value = ''; renderAgents(); break;
         case 'add-action': actionForm(null, el.dataset.agent); break;
